@@ -34,9 +34,6 @@ public class AboutController extends BorderPane {
         versionLabel.setFont(Font.font("Arial", 14));
         versionLabel.setTextFill(Color.LIGHTGRAY);
 
-        Label authorLabel = new Label("Автор: " + AppInfo.COPYRIGHT);
-        authorLabel.setFont(Font.font("Arial", 14));
-        authorLabel.setTextFill(Color.LIGHTGRAY);
 
         Label descriptionLabel = new Label("Классическая игра в морской бой");
         descriptionLabel.setFont(Font.font("Arial", 14));
@@ -45,8 +42,7 @@ public class AboutController extends BorderPane {
         Button backButton = new Button("Назад");
         backButton.setOnAction(e -> goBack());
 
-        centerBox.getChildren().addAll(titleLabel, nameLabel, versionLabel,
-                authorLabel, descriptionLabel, backButton);
+        centerBox.getChildren().addAll(titleLabel, nameLabel, versionLabel, descriptionLabel, backButton);
         setCenter(centerBox);
     }
 
