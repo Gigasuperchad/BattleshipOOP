@@ -30,8 +30,8 @@ public class GameController extends BorderPane {
     private String connectionType; // "host" или "client"
     private boolean opponentReady = false;
     private boolean iAmReady = false;
-    private int enemyShipsSunk = 0;
-    private final int totalEnemyShips = 10; // 10 кораблей у противника
+    private int enemyHits = 0;
+    private final int totalEnemyCells = 20; // 10 кораблей у противника
     private String gameMode = "single"; // "single", "host", "client"
     private boolean connectionDialogShown = false;
 
@@ -913,7 +913,6 @@ public class GameController extends BorderPane {
         System.out.println("=== СОСТОЯНИЕ ИГРЫ ===");
         System.out.println("gameStarted: " + gameStarted);
         System.out.println("isMyTurn: " + isMyTurn);
-        System.out.println("enemyShipsSunk: " + enemyShipsSunk + "/" + totalEnemyShips);
         System.out.println("player.allShipsSunk(): " + (player != null ? player.allShipsSunk() : "player is null"));
         System.out.println("enemy.allShipsSunk(): " + (enemy != null ? enemy.allShipsSunk() : "enemy is null"));
         System.out.println("=== КОНЕЦ СОСТОЯНИЯ ===");
@@ -972,34 +971,26 @@ public class GameController extends BorderPane {
 
     private void handleResultMessage(String message) {
         try {
-            debugGameState();
             String[] parts = message.substring(7).split(",");
             int x = Integer.parseInt(parts[0]);
             int y = Integer.parseInt(parts[1]);
             String result = parts[2];
 
-            System.out.println("[GameController] Результат выстрела: " + x + "," + y + " = " + result);
-
             Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
             if (cell != null) {
                 if (result.equals("HIT") || result.equals("SUNK")) {
                     cell.setFill(Color.RED);
+                    enemyHits++;
 
-                    if (result.equals("SUNK")) {
-                        enemyShipsSunk++;
-                        System.out.println("[GameController] Корабль потоплен! Всего: " + enemyShipsSunk + "/" + totalEnemyShips);
-                        showInfo("Вы потопили корабль! Всего потоплено: " + enemyShipsSunk + "/" + totalEnemyShips);
+                    System.out.println("[GameController] Попадание! Всего попаданий: " + enemyHits + "/" + totalEnemyCells);
 
-                        // Проверяем победу
-                        if (enemyShipsSunk >= totalEnemyShips) {
-                            handleVictory();
-                            return;
-                        }
-                    } else {
-                        showInfo("Вы попали в корабль!");
+                    // Проверяем победу
+                    if (enemyHits >= totalEnemyCells) {
+                        handleVictory();
+                        return;
                     }
 
-                    // При попадании - дополнительный ход
+                    // Дополнительный ход при попадании
                     isMyTurn = true;
                     statusLabel.setText("Вы попали! Стреляйте снова");
                     statusLabel.setTextFill(Color.LIGHTGREEN);
@@ -1007,7 +998,6 @@ public class GameController extends BorderPane {
 
                 } else if (result.equals("MISS")) {
                     cell.setFill(Color.WHITE);
-                    showInfo("Промах!");
 
                     // Промах - ход противника
                     isMyTurn = false;
@@ -1018,7 +1008,7 @@ public class GameController extends BorderPane {
             }
 
         } catch (Exception e) {
-            System.err.println("[GameController] Ошибка обработки результата: " + e.getMessage());
+            System.err.println("[GameController] Ошибка: " + e.getMessage());
         }
     }
 
@@ -1150,7 +1140,7 @@ public class GameController extends BorderPane {
         gameStarted = false;
         iAmReady = false;
         opponentReady = false;
-        enemyShipsSunk = 0;
+        enemyHits = 0;
 
         // Перерасставляем корабли
         placeAllShipsAutomatically();
