@@ -50,33 +50,58 @@ public class HelloApplication extends Application {
     }
 
     private void initializeViews() {
+        // Главное меню
         navigator.addView(new ViewObject(
                 "HelloController",
-                AppProperties.getString("menu.home"),
+                "Главное меню",
                 false,
                 o -> true,
                 null
         ));
 
-        navigator.addView(new ViewObject(
+        // Одиночная игра
+        ViewObject aiView = new ViewObject(
+                "AIController",
+                "Одиночная игра",
+                false,
+                o -> true,
+                null
+        );
+        navigator.addView(aiView);
+
+        // Сетевая игра (хост)
+        ViewObject hostView = new ViewObject(
                 "GameController",
-                AppProperties.getString("menu.game"),
+                "Сетевая игра (Хост)",
                 false,
                 o -> true,
                 null
-        ));
+        );
+        navigator.addView(hostView);
 
+        // Сетевая игра (клиент)
+        ViewObject clientView = new ViewObject(
+                "GameController",
+                "Сетевая игра (Клиент)",
+                false,
+                o -> true,
+                null
+        );
+        navigator.addView(clientView);
+
+        // Настройки
         navigator.addView(new ViewObject(
                 "SettingsController",
-                AppProperties.getString("menu.settings"),
+                "Настройки",
                 true,
                 o -> true,
                 null
         ));
 
+        // О программе
         navigator.addView(new ViewObject(
                 "AboutController",
-                AppProperties.getString("menu.about"),
+                "О программе",
                 false,
                 o -> true,
                 null

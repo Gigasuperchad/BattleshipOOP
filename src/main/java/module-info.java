@@ -9,4 +9,6 @@ module com.example.battleshipoop {
     opens com.example.battleshipoop.app to javafx.fxml;
     exports com.example.battleshipoop.app.controllers;
     opens com.example.battleshipoop.app.controllers to javafx.fxml;
+    exports com.example.battleshipoop.models;
+    opens com.example.battleshipoop.models to javafx.fxml;
 }

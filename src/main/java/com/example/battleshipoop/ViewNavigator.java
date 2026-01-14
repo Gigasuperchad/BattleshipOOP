@@ -37,6 +37,35 @@ public class ViewNavigator {
         }
     }
 
+    public void navigateToController(String controllerName) {
+        for (ViewObject view : views) {
+            if (view.getView() != null) {
+                String viewClassName = view.getView().getClass().getSimpleName();
+                if (viewClassName.equals(controllerName)) {
+                    navigate(view);
+                    return;
+                }
+            }
+        }
+
+        // Если не нашли, создаем новый
+        try {
+            ViewObject newView = new ViewObject(
+                    controllerName,
+                    controllerName,
+                    false,
+                    o -> true,
+                    null
+            );
+
+            newView.setOnNavigate(() -> navigate(newView));
+            addView(newView);
+            navigate(newView);
+        } catch (Exception e) {
+            System.err.println("Ошибка создания контроллера " + controllerName + ": " + e.getMessage());
+        }
+    }
+
     private void navigateToView(ViewObject viewObject) {
         Node view = viewObject.getView();
 
