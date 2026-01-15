@@ -4,6 +4,7 @@ import com.example.battleshipoop.app.HelloApplication;
 import com.example.battleshipoop.models.*;
 import com.example.battleshipoop.network.GameClient;
 import com.example.battleshipoop.network.GameServer;
+import com.example.battleshipoop.app.ChatManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -13,6 +14,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
+
 
 import java.util.Optional;
 
@@ -34,6 +36,14 @@ public class GameController extends BorderPane {
     private final int totalEnemyCells = 20; // 10 кораблей у противника
     private String gameMode = "single"; // "single", "host", "client"
     private boolean connectionDialogShown = false;
+    private ChatManager chatManager;
+    private boolean chatLaunched = false;
+    private VBox chatPanel;
+    private TextArea chatArea;
+    private TextField chatInput;
+    private Button chatSendButton;
+    private boolean chatInitialized = false;
+
 
     public GameController(String gameMode) {
         this.gameMode = gameMode;
@@ -44,6 +54,8 @@ public class GameController extends BorderPane {
         } else if (gameMode.equals("client")) {
             connectionType = "client";
         }
+
+        this.chatManager = new ChatManager();
 
         initializeUI();
         initializeGame();
@@ -123,7 +135,27 @@ public class GameController extends BorderPane {
                     statusLabel.setText("Запуск сервера...");
                     showInfo("Вы создаете игру. Сообщите свой IP другому игроку.");
 
-                    // Запускаем сервер с небольшой задержкой
+                    // Запускаем сервер чата в фоновом режиме
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(2000); // Даем время на инициализацию UI
+
+                            if (chatManager != null) {
+                                System.out.println("Запуск сервера чата для хоста...");
+                                boolean chatStarted = chatManager.launchChatServer();
+
+                                if (chatStarted) {
+                                    Platform.runLater(() -> {
+                                        showInfo("Сервер чата запущен. Вы можете открыть чат после подключения противника.");
+                                    });
+                                }
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+
+                    // Запускаем игровой сервер
                     new Thread(() -> {
                         try {
                             Thread.sleep(1000);
@@ -148,12 +180,6 @@ public class GameController extends BorderPane {
                             Thread.currentThread().interrupt();
                         }
                     }).start();
-                    break;
-
-                case "single":
-                default:
-                    playerLabel.setText("Одиночная игра");
-                    statusLabel.setText("Расставьте корабли");
                     break;
             }
         });
@@ -224,18 +250,113 @@ public class GameController extends BorderPane {
     }
 
     private HBox createGameArea() {
-        HBox gameArea = new HBox(50);
+        HBox gameArea = new HBox(30);
         gameArea.setAlignment(Pos.CENTER);
         gameArea.setPadding(new Insets(20));
 
         VBox playerField = createPlayerField();
         VBox enemyField = createEnemyField();
 
-        gameArea.getChildren().addAll(playerField, enemyField);
+        // Создаем панель чата для сетевой игры
+        if (gameMode.equals("host") || gameMode.equals("client")) {
+            chatPanel = createChatPanel();
+            gameArea.getChildren().addAll(playerField, enemyField, chatPanel);
+        } else {
+            // Для одиночной игры чат не нужен
+            gameArea.getChildren().addAll(playerField, enemyField);
+        }
+
         return gameArea;
     }
 
+    private VBox createChatPanel() {
+        VBox chatPanel = new VBox(5);
+        chatPanel.setPrefWidth(300);
+        chatPanel.setStyle("-fx-background-color: rgba(30, 34, 42, 0.95); -fx-padding: 10; -fx-border-color: #4CAF50; -fx-border-width: 2; -fx-border-radius: 5;");
 
+        // Заголовок чата
+        HBox titleBox = new HBox();
+        titleBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label chatTitle = new Label("💬 Игровой чат");
+        chatTitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #4CAF50; -fx-font-weight: bold;");
+
+        titleBox.getChildren().add(chatTitle);
+
+        // Область сообщений
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+        chatArea.setWrapText(true);
+        chatArea.setPrefHeight(400);
+        chatArea.setStyle("-fx-control-inner-background: #2C3E50; -fx-text-fill: #ECF0F1; -fx-font-family: 'Consolas'; -fx-font-size: 12px;");
+
+        // Панель ввода
+        HBox inputBox = new HBox(5);
+        inputBox.setPadding(new Insets(5, 0, 0, 0));
+
+        chatInput = new TextField();
+        chatInput.setPromptText("Введите сообщение...");
+        chatInput.setPrefWidth(200);
+        chatInput.setStyle("-fx-background-color: #34495E; -fx-text-fill: white; -fx-prompt-text-fill: #95A5A6; -fx-border-color: #4CAF50; -fx-border-width: 1;");
+
+        // Обработка нажатия Enter
+        chatInput.setOnAction(e -> sendChatMessage());
+
+        chatSendButton = new Button("➤");
+        chatSendButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-min-width: 40;");
+        chatSendButton.setOnAction(e -> sendChatMessage());
+
+        inputBox.getChildren().addAll(chatInput, chatSendButton);
+
+        chatPanel.getChildren().addAll(titleBox, chatArea, inputBox);
+
+        // Инициализируем чат
+        initializeChat();
+
+        return chatPanel;
+    }
+
+    private void initializeChat() {
+        if (chatInitialized) return;
+
+        chatArea.appendText("=== ИГРОВОЙ ЧАТ ===\n");
+        chatArea.appendText("Автоматически подключен\n");
+        chatArea.appendText("Общайтесь с противником\n");
+        chatArea.appendText("===================\n\n");
+
+        chatInitialized = true;
+    }
+
+    private void sendChatMessage() {
+        String message = chatInput.getText().trim();
+        if (!message.isEmpty()) {
+            // Добавляем свое сообщение сразу
+            chatArea.appendText("Вы: " + message + "\n");
+
+            // Отправляем через сетевое соединение
+            if (gameClient != null && gameClient.isConnected()) {
+                gameClient.sendChatMessage(message);
+            } else if (gameServer != null && gameServer.isRunning()) {
+                // Хост отправляет сообщение через свой канал
+                gameServer.sendMessage("CHAT:Хост:" + message);
+            }
+
+            chatInput.clear();
+        }
+    }
+
+    private void handleChatMessage(String sender, String message) {
+        Platform.runLater(() -> {
+            // Фильтруем системные сообщения
+            if (sender.equals("История")) {
+                chatArea.appendText("[История] " + message + "\n");
+            } else if (!sender.equals("Система") && !sender.equals("Вы")) {
+                chatArea.appendText(sender + ": " + message + "\n");
+            } else if (sender.equals("Система")) {
+                chatArea.appendText("⚡ " + message + "\n");
+            }
+        });
+    }
 
     private VBox createPlayerField() {
         VBox fieldBox = new VBox(10);
@@ -327,15 +448,13 @@ public class GameController extends BorderPane {
 
         Button autoPlaceButton = new Button("Авторасстановка");
         autoPlaceButton.setOnAction(e -> {
-            placeAllShipsAutomatically(); // ПРАВИЛЬНО: placeAllShipsAutomatically()
+            placeAllShipsAutomatically();
             updatePlayerGrid();
             showInfo("Корабли расставлены автоматически");
-
-            // После расстановки проверяем, можно ли нажать "Готов"
             updateReadyButtonState();
         });
 
-        // Кнопка "Готов" с индикатором состояния
+        // Кнопка "Готов"
         Button readyButton = new Button("Готов к игре");
         readyButton.setId("readyButton");
         readyButton.setOnAction(e -> {
@@ -352,24 +471,14 @@ public class GameController extends BorderPane {
 
         bottomPanel.getChildren().addAll(leftBox, centerBox);
 
-        // Кнопки управления соединением
-        if (gameMode.equals("host")) {
-            Button restartServerButton = new Button("Перезапустить сервер");
-            restartServerButton.setOnAction(e -> {
-                if (gameServer != null) {
-                    gameServer.stop();
-                }
-                hostGame();
-            });
+        // Кнопка чата (только для сетевой игры)
+        if (gameMode.equals("host") || gameMode.equals("client")) {
+            Button chatButton = new Button("💬 Чат");
+            chatButton.setId("chatButton");
+            chatButton.setOnAction(e -> openGameChat());
+            chatButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
 
-            VBox rightBox = new VBox(5, restartServerButton);
-            bottomPanel.getChildren().add(rightBox);
-
-        } else if (gameMode.equals("client")) {
-            Button reconnectButton = new Button("Переподключиться");
-            reconnectButton.setOnAction(e -> showConnectDialog());
-
-            VBox rightBox = new VBox(5, reconnectButton);
+            VBox rightBox = new VBox(5, chatButton);
             bottomPanel.getChildren().add(rightBox);
         }
 
@@ -428,6 +537,26 @@ public class GameController extends BorderPane {
             }
         }
     }
+
+
+    private void launchChatClient(String username) {
+        new Thread(() -> {
+            try {
+                System.out.println("Запуск клиента чата: " + username);
+
+                if (chatManager.launchChatClient(username)) {
+                    Platform.runLater(() -> {
+                        showInfo("Чат запущен! Вы можете общаться с противником.");
+                        updateChatButtonState();
+                    });
+                }
+            } catch (Exception e) {
+                System.err.println("Ошибка запуска чата: " + e.getMessage());
+            }
+        }).start();
+    }
+
+
 
     private void updateEnemyGrid() {
         for (int y = 0; y < 10; y++) {
@@ -626,7 +755,7 @@ public class GameController extends BorderPane {
 
     private void hostGame() {
         try {
-            System.out.println("Запуск сервера...");
+            System.out.println("Запуск сервера игры с встроенным чатом...");
 
             String localIP = getLocalIP();
             statusLabel.setText("Сервер запускается... IP: " + localIP);
@@ -646,9 +775,14 @@ public class GameController extends BorderPane {
                         statusLabel.setText("Противник подключен: " + clientAddress);
                         playerLabel.setText("Хост (Ожидание готовности)");
                         connectionType = "host";
-                        showInfo("Противник подключился! Расставьте корабли и нажмите 'Готов'.");
 
-                        updateUIForConnectedState();
+                        // Приветственное сообщение в чат
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Противник подключился к игре\n");
+                            chatArea.appendText("⚡ Начинайте общение в чате\n");
+                        }
+
+                        showInfo("Противник подключился! Расставьте корабли и нажмите 'Готов'.");
                     });
                 }
 
@@ -656,7 +790,9 @@ public class GameController extends BorderPane {
                 public void onConnectionClosed() {
                     Platform.runLater(() -> {
                         statusLabel.setText("Соединение разорвано");
-                        showAlert("Соединение", "Противник отключился");
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Противник отключился\n");
+                        }
                         gameStarted = false;
                     });
                 }
@@ -665,10 +801,124 @@ public class GameController extends BorderPane {
             statusLabel.setText("Сервер запущен. Ожидаем подключения...");
             showInfo("Сервер запущен на порту 5555. Ваш IP: " + localIP + "\nСообщите этот IP другому игроку.");
 
+            // Инициализируем чат для хоста
+            initializeHostChat();
+
         } catch (Exception e) {
             showError("Ошибка запуска сервера: " + e.getMessage());
             System.err.println("Ошибка hostGame: " + e.getMessage());
         }
+    }
+
+    private void initializeHostChat() {
+        if (chatArea != null) {
+            chatArea.appendText("⚡ Вы - хост игры\n");
+            chatArea.appendText("⚡ Ожидаем подключения противника\n");
+            chatArea.appendText("⚡ Чат будет доступен после подключения\n");
+        }
+    }
+
+    private void launchHostChat() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000); // Небольшая задержка
+
+                System.out.println("🔄 Запуск чата для хоста...");
+
+                // Запускаем сервер чата
+                boolean serverStarted = chatManager.launchChatServer();
+
+                if (serverStarted) {
+                    // Ждем запуска сервера
+                    Thread.sleep(3000);
+
+                    // Запускаем клиент чата для хоста
+                    chatManager.launchChatClient("Хост_Игрок");
+
+                    Platform.runLater(() -> {
+                        showInfo("✅ Чат запущен! Вы можете общаться с противником.");
+                    });
+                }
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
+    }
+
+
+    private void launchClientChat() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000); // Небольшая задержка
+
+                System.out.println("🔄 Запуск чата для клиента...");
+
+                // Запускаем только клиент чата
+                chatManager.launchChatClient("Клиент_Игрок");
+
+                Platform.runLater(() -> {
+                    showInfo("✅ Чат запущен! Подключитесь к localhost:12345");
+                });
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
+    }
+
+    private void openGameChat() {
+        if (chatPanel != null) {
+            // Просто фокусируемся на поле ввода
+            chatInput.requestFocus();
+
+            if (!chatInitialized) {
+                initializeChat();
+            }
+
+            showInfo("Чат активен. Введите сообщение и нажмите Enter.");
+        } else {
+            showInfo("Чат доступен только в сетевой игре");
+        }
+    }
+
+
+    private boolean isChatAvailableForUser() {
+        // Чат доступен, если есть подключение к противнику
+        if (gameMode.equals("host")) {
+            return gameServer != null && gameServer.isRunning();
+        } else if (gameMode.equals("client")) {
+            return gameClient != null && gameClient.isConnected();
+        }
+        return false;
+    }
+
+    private void updateChatButtonState() {
+        Platform.runLater(() -> {
+            Button chatButton = (Button) lookup("#chatButton");
+            if (chatButton != null) {
+                boolean available = isChatAvailableForUser();
+
+                if (available) {
+                    chatButton.setDisable(false);
+
+                    if (chatLaunched) {
+                        chatButton.setStyle("-fx-background-color: #2ECC71; -fx-text-fill: white;");
+                        chatButton.setText("💬 Чат (запущен)");
+                    } else if (connectionType != null && connectionType.equals("host")) {
+                        chatButton.setStyle("-fx-background-color: #F39C12; -fx-text-fill: white;");
+                        chatButton.setText("💬 Запустить чат");
+                    } else {
+                        chatButton.setStyle("-fx-background-color: #3498DB; -fx-text-fill: white;");
+                        chatButton.setText("💬 Открыть чат");
+                    }
+                } else {
+                    chatButton.setDisable(true);
+                    chatButton.setStyle("-fx-background-color: #7F8C8D; -fx-text-fill: white;");
+                    chatButton.setText("💬 Чат");
+                }
+            }
+        });
     }
 
     private void connectToGame(String serverAddress) {
@@ -684,15 +934,26 @@ public class GameController extends BorderPane {
                 }
 
                 @Override
+                public void onChatMessageReceived(String sender, String message) {
+                    handleChatMessage(sender, message);
+                }
+
+                @Override
                 public void onConnected() {
                     Platform.runLater(() -> {
                         System.out.println("Успешно подключено к серверу");
                         statusLabel.setText("Подключено к " + serverAddress);
                         playerLabel.setText("Клиент (Ожидание хода)");
                         connectionType = "client";
-                        showInfo("Успешно подключено! Расставьте корабли и нажмите 'Готов'.");
 
-                        updateUIForConnectedState();
+                        // Приветственное сообщение в чат
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Подключено к игре\n");
+                            chatArea.appendText("⚡ Вы - клиент\n");
+                            chatArea.appendText("⚡ Можете общаться в чате\n");
+                        }
+
+                        showInfo("Успешно подключено! Расставьте корабли и нажмите 'Готов'.");
                     });
                 }
 
@@ -700,7 +961,9 @@ public class GameController extends BorderPane {
                 public void onConnectionClosed() {
                     Platform.runLater(() -> {
                         statusLabel.setText("Соединение разорвано");
-                        showAlert("Соединение", "Сервер отключился");
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Соединение с сервером потеряно\n");
+                        }
                         gameStarted = false;
                     });
                 }
@@ -710,7 +973,6 @@ public class GameController extends BorderPane {
             showError("Не удалось подключиться к " + serverAddress + ": " + e.getMessage());
             System.err.println("Ошибка подключения: " + e.getMessage());
 
-            // Пробуем еще раз
             Platform.runLater(() -> {
                 Alert retryAlert = new Alert(Alert.AlertType.CONFIRMATION);
                 retryAlert.setTitle("Ошибка подключения");
@@ -803,9 +1065,19 @@ public class GameController extends BorderPane {
                 } else if (message.startsWith("WIN:")) {
                     handleWinMessage(message);
                 } else if (message.startsWith("CHAT:")) {
-                    handleChatMessage(message);
+                    // Обработка сообщений чата
+                    String chatContent = message.substring(5);
+                    String sender = "Противник";
+                    String chatMessage = chatContent;
+
+                    if (chatContent.contains(":")) {
+                        int colonIndex = chatContent.indexOf(":");
+                        sender = chatContent.substring(0, colonIndex);
+                        chatMessage = chatContent.substring(colonIndex + 1);
+                    }
+
+                    handleChatMessage(sender, chatMessage);
                 } else if (message.equals("READY")) {
-                    // Для обратной совместимости
                     handleReadyMessage("READY:unknown");
                 }
 
@@ -834,18 +1106,27 @@ public class GameController extends BorderPane {
                 opponentReady = true;
                 System.out.println("Противник готов. Тип: " + opponentType);
 
-                showInfo("Противник готов к игре!");
+                showInfo("Противник готов к игру!");
 
-                // Обновляем статус
+                // Автоматически активируем чат при готовности противника
+                if (chatArea != null) {
+                    chatArea.appendText("⚡ Противник готов к игре!\n");
+                    chatArea.appendText("⚡ Теперь можете общаться в чате\n");
+                    chatInput.requestFocus(); // Фокус на поле ввода
+                }
+
                 if (iAmReady) {
                     statusLabel.setText("Оба игрока готовы! Начинаем игру...");
                     statusLabel.setTextFill(Color.GREEN);
 
-                    // Запускаем игру через 2 секунды
+                    // Отправляем приветственное сообщение в чат
+                    sendWelcomeChatMessage();
+
+                    // Запускаем игру через 3 секунды
                     new Thread(() -> {
                         try {
-                            Thread.sleep(2000);
-                            Platform.runLater(() -> startGame(opponentType)); // ПРАВИЛЬНО: с параметром
+                            Thread.sleep(3000);
+                            Platform.runLater(() -> startGame(opponentType));
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
@@ -906,6 +1187,15 @@ public class GameController extends BorderPane {
                     node.setCursor(javafx.scene.Cursor.DEFAULT);
                 }
             }
+        }
+    }
+
+    private void sendWelcomeChatMessage() {
+        String welcomeMessage = "Привет! Готов играть!";
+        if (gameClient != null && gameClient.isConnected()) {
+            gameClient.sendChatMessage(welcomeMessage);
+        } else if (gameServer != null && gameServer.isRunning()) {
+            gameServer.sendMessage("CHAT:Хост:" + welcomeMessage);
         }
     }
 
@@ -1096,6 +1386,10 @@ public class GameController extends BorderPane {
         // Сохраняем ссылки на приложение до закрытия соединений
         HelloApplication app = HelloApplication.getInstance();
 
+        if (chatArea != null) {
+            chatArea.clear();
+            chatInitialized = false;
+        }
         // Закрываем соединения в правильном порядке
         try {
             if (gameClient != null) {
@@ -1130,6 +1424,13 @@ public class GameController extends BorderPane {
 
     private void restartGame() {
         System.out.println("[GameController] Перезапуск игры...");
+
+        if (chatArea != null) {
+            chatArea.clear();
+            chatInitialized = false;
+            initializeChat();
+        }
+        chatLaunched = false;
 
         // Сбрасываем игроков
         player = new Player("Игрок");

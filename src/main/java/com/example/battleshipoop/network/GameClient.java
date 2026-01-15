@@ -10,11 +10,13 @@ public class GameClient {
     private BufferedReader in;
     private ExecutorService executor;
     private GameMessageListener listener;
+    private String username;
 
     public interface GameMessageListener {
         void onMessageReceived(String message);
         void onConnected();
         void onConnectionClosed();
+        void onChatMessageReceived(String sender, String message); // Новый метод для чата
     }
 
     public void connect(String serverAddress, int port, GameMessageListener listener) throws IOException {
@@ -34,7 +36,10 @@ public class GameClient {
                 try {
                     String inputLine;
                     while ((inputLine = in.readLine()) != null) {
-                        if (listener != null) {
+                        // Проверяем, является ли сообщение чатом
+                        if (inputLine.startsWith("CHAT:")) {
+                            handleChatMessage(inputLine);
+                        } else if (listener != null) {
                             listener.onMessageReceived(inputLine);
                         }
                     }
@@ -50,9 +55,38 @@ public class GameClient {
         }
     }
 
+    private void handleChatMessage(String message) {
+        String chatContent = message.substring(5);
+
+        // Разделяем отправителя и сообщение
+        String sender = "Система";
+        String chatMessage = chatContent;
+
+        if (chatContent.contains(":")) {
+            int colonIndex = chatContent.indexOf(":");
+            sender = chatContent.substring(0, colonIndex);
+            chatMessage = chatContent.substring(colonIndex + 1);
+        }
+
+        // Если это сообщение от вас самих, пропускаем его
+        if (sender.equals("Вы")) {
+            return; // Не добавляем дубль
+        }
+
+        if (listener != null) {
+            listener.onChatMessageReceived(sender, chatMessage);
+        }
+    }
+
     public void sendMessage(String message) {
         if (out != null) {
             out.println(message);
+        }
+    }
+
+    public void sendChatMessage(String message) {
+        if (out != null) {
+            out.println("CHAT:" + message);
         }
     }
 
@@ -73,5 +107,13 @@ public class GameClient {
 
     public boolean isConnected() {
         return socket != null && socket.isConnected() && !socket.isClosed();
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getUsername() {
+        return username;
     }
 }
