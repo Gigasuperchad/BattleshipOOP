@@ -15,7 +15,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
-
 import java.util.Optional;
 
 public class GameController extends BorderPane {
@@ -43,7 +42,6 @@ public class GameController extends BorderPane {
     private TextField chatInput;
     private Button chatSendButton;
     private boolean chatInitialized = false;
-
 
     public GameController(String gameMode) {
         this.gameMode = gameMode;
@@ -135,30 +133,10 @@ public class GameController extends BorderPane {
                     statusLabel.setText("Запуск сервера...");
                     showInfo("Вы создаете игру. Сообщите свой IP другому игроку.");
 
-                    // Запускаем сервер чата в фоновом режиме
+                    // Запускаем сервер в фоновом режиме
                     new Thread(() -> {
                         try {
                             Thread.sleep(2000); // Даем время на инициализацию UI
-
-                            if (chatManager != null) {
-                                System.out.println("Запуск сервера чата для хоста...");
-                                boolean chatStarted = chatManager.launchChatServer();
-
-                                if (chatStarted) {
-                                    Platform.runLater(() -> {
-                                        showInfo("Сервер чата запущен. Вы можете открыть чат после подключения противника.");
-                                    });
-                                }
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }).start();
-
-                    // Запускаем игровой сервер
-                    new Thread(() -> {
-                        try {
-                            Thread.sleep(1000);
                             Platform.runLater(() -> hostGame());
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
@@ -197,13 +175,6 @@ public class GameController extends BorderPane {
         dialog.setHeaderText("Введите IP-адрес сервера");
         dialog.setContentText("IP-адрес:");
         dialog.getDialogPane().setPrefSize(400, 150);
-
-        // Примеры IP адресов для подсказки
-        Label hintLabel = new Label("Примеры: localhost, 192.168.1.100, 10.0.0.5");
-        hintLabel.setStyle("-fx-text-fill: gray; -fx-font-size: 11px;");
-
-        // ИСПРАВЛЕНА ЭТА СТРОКА:
-        dialog.getDialogPane().setContent(new VBox(5, new Label(dialog.getContentText()), new TextField(), hintLabel));
 
         Optional<String> result = dialog.showAndWait();
         if (result.isPresent() && !result.get().trim().isEmpty()) {
@@ -330,15 +301,15 @@ public class GameController extends BorderPane {
     private void sendChatMessage() {
         String message = chatInput.getText().trim();
         if (!message.isEmpty()) {
-            // Добавляем свое сообщение сразу
+            // Добавляем сообщение в чат сразу для всех
             chatArea.appendText("Вы: " + message + "\n");
 
             // Отправляем через сетевое соединение
             if (gameClient != null && gameClient.isConnected()) {
                 gameClient.sendChatMessage(message);
             } else if (gameServer != null && gameServer.isRunning()) {
-                // Хост отправляет сообщение через свой канал
-                gameServer.sendMessage("CHAT:Хост:" + message);
+                // Хост отправляет сообщение на сервер
+                gameServer.sendMessage("CHAT:" + message);
             }
 
             chatInput.clear();
@@ -347,13 +318,19 @@ public class GameController extends BorderPane {
 
     private void handleChatMessage(String sender, String message) {
         Platform.runLater(() -> {
-            // Фильтруем системные сообщения
-            if (sender.equals("История")) {
-                chatArea.appendText("[История] " + message + "\n");
-            } else if (!sender.equals("Система") && !sender.equals("Вы")) {
-                chatArea.appendText(sender + ": " + message + "\n");
-            } else if (sender.equals("Система")) {
-                chatArea.appendText("⚡ " + message + "\n");
+            // Для клиента: добавляем все сообщения, кроме своих
+            if (gameClient != null && gameClient.isConnected()) {
+                // Пропускаем сообщения от "Вы" (они уже добавлены при отправке)
+                if (!sender.equals("Вы")) {
+                    chatArea.appendText(sender + ": " + message + "\n");
+                }
+            }
+            // Для хоста: сообщения уже добавлены при отправке,
+            // получаем только сообщения от клиента
+            else if (gameServer != null && gameServer.isRunning()) {
+                if (!sender.equals("Вы") && !sender.equals("Хост")) {
+                    chatArea.appendText(sender + ": " + message + "\n");
+                }
             }
         });
     }
@@ -538,26 +515,6 @@ public class GameController extends BorderPane {
         }
     }
 
-
-    private void launchChatClient(String username) {
-        new Thread(() -> {
-            try {
-                System.out.println("Запуск клиента чата: " + username);
-
-                if (chatManager.launchChatClient(username)) {
-                    Platform.runLater(() -> {
-                        showInfo("Чат запущен! Вы можете общаться с противником.");
-                        updateChatButtonState();
-                    });
-                }
-            } catch (Exception e) {
-                System.err.println("Ошибка запуска чата: " + e.getMessage());
-            }
-        }).start();
-    }
-
-
-
     private void updateEnemyGrid() {
         for (int y = 0; y < 10; y++) {
             for (int x = 0; x < 10; x++) {
@@ -667,10 +624,6 @@ public class GameController extends BorderPane {
                 return;
             }
 
-            // Проверяем, подключен ли клиент
-            System.out.println("Проверяем подключение клиента...");
-            // В GameServer нужно добавить метод для проверки подключения клиента
-
         } else if (gameMode.equals("client")) {
             if (gameClient == null) {
                 showError("Клиент не создан! Нажмите 'Подключиться'");
@@ -744,15 +697,6 @@ public class GameController extends BorderPane {
         System.out.println("=== ЗАВЕРШЕНИЕ ОТПРАВКИ СИГНАЛА ГОТОВНОСТИ ===");
     }
 
-    private void sendAttack(int x, int y) {
-        String message = "ATTACK:" + x + "," + y;
-        if (gameClient != null && gameClient.isConnected()) {
-            gameClient.sendMessage(message);
-        } else if (gameServer != null && gameServer.isRunning()) {
-            gameServer.sendMessage(message);
-        }
-    }
-
     private void hostGame() {
         try {
             System.out.println("Запуск сервера игры с встроенным чатом...");
@@ -801,70 +745,10 @@ public class GameController extends BorderPane {
             statusLabel.setText("Сервер запущен. Ожидаем подключения...");
             showInfo("Сервер запущен на порту 5555. Ваш IP: " + localIP + "\nСообщите этот IP другому игроку.");
 
-            // Инициализируем чат для хоста
-            initializeHostChat();
-
         } catch (Exception e) {
             showError("Ошибка запуска сервера: " + e.getMessage());
             System.err.println("Ошибка hostGame: " + e.getMessage());
         }
-    }
-
-    private void initializeHostChat() {
-        if (chatArea != null) {
-            chatArea.appendText("⚡ Вы - хост игры\n");
-            chatArea.appendText("⚡ Ожидаем подключения противника\n");
-            chatArea.appendText("⚡ Чат будет доступен после подключения\n");
-        }
-    }
-
-    private void launchHostChat() {
-        new Thread(() -> {
-            try {
-                Thread.sleep(1000); // Небольшая задержка
-
-                System.out.println("🔄 Запуск чата для хоста...");
-
-                // Запускаем сервер чата
-                boolean serverStarted = chatManager.launchChatServer();
-
-                if (serverStarted) {
-                    // Ждем запуска сервера
-                    Thread.sleep(3000);
-
-                    // Запускаем клиент чата для хоста
-                    chatManager.launchChatClient("Хост_Игрок");
-
-                    Platform.runLater(() -> {
-                        showInfo("✅ Чат запущен! Вы можете общаться с противником.");
-                    });
-                }
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }).start();
-    }
-
-
-    private void launchClientChat() {
-        new Thread(() -> {
-            try {
-                Thread.sleep(1000); // Небольшая задержка
-
-                System.out.println("🔄 Запуск чата для клиента...");
-
-                // Запускаем только клиент чата
-                chatManager.launchChatClient("Клиент_Игрок");
-
-                Platform.runLater(() -> {
-                    showInfo("✅ Чат запущен! Подключитесь к localhost:12345");
-                });
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }).start();
     }
 
     private void openGameChat() {
@@ -880,45 +764,6 @@ public class GameController extends BorderPane {
         } else {
             showInfo("Чат доступен только в сетевой игре");
         }
-    }
-
-
-    private boolean isChatAvailableForUser() {
-        // Чат доступен, если есть подключение к противнику
-        if (gameMode.equals("host")) {
-            return gameServer != null && gameServer.isRunning();
-        } else if (gameMode.equals("client")) {
-            return gameClient != null && gameClient.isConnected();
-        }
-        return false;
-    }
-
-    private void updateChatButtonState() {
-        Platform.runLater(() -> {
-            Button chatButton = (Button) lookup("#chatButton");
-            if (chatButton != null) {
-                boolean available = isChatAvailableForUser();
-
-                if (available) {
-                    chatButton.setDisable(false);
-
-                    if (chatLaunched) {
-                        chatButton.setStyle("-fx-background-color: #2ECC71; -fx-text-fill: white;");
-                        chatButton.setText("💬 Чат (запущен)");
-                    } else if (connectionType != null && connectionType.equals("host")) {
-                        chatButton.setStyle("-fx-background-color: #F39C12; -fx-text-fill: white;");
-                        chatButton.setText("💬 Запустить чат");
-                    } else {
-                        chatButton.setStyle("-fx-background-color: #3498DB; -fx-text-fill: white;");
-                        chatButton.setText("💬 Открыть чат");
-                    }
-                } else {
-                    chatButton.setDisable(true);
-                    chatButton.setStyle("-fx-background-color: #7F8C8D; -fx-text-fill: white;");
-                    chatButton.setText("💬 Чат");
-                }
-            }
-        });
     }
 
     private void connectToGame(String serverAddress) {
@@ -989,26 +834,6 @@ public class GameController extends BorderPane {
             });
         }
     }
-
-    private void updateUIForConnectedState() {
-        // Добавляем кнопку "Готов" после подключения
-        HBox bottomPanel = (HBox) getBottom();
-        if (bottomPanel != null) {
-            Button readyButton = new Button("Готов к игре");
-            readyButton.setOnAction(e -> {
-                if (player.allShipsPlaced()) {
-                    sendReadySignal();
-                } else {
-                    showInfo("Сначала расставьте все корабли!");
-                }
-            });
-
-            VBox readyBox = new VBox(5, readyButton);
-            bottomPanel.getChildren().add(readyBox);
-        }
-    }
-
-
 
     private void placeAllShipsAutomatically() {
         // Сбрасываем игрока
@@ -1195,17 +1020,8 @@ public class GameController extends BorderPane {
         if (gameClient != null && gameClient.isConnected()) {
             gameClient.sendChatMessage(welcomeMessage);
         } else if (gameServer != null && gameServer.isRunning()) {
-            gameServer.sendMessage("CHAT:Хост:" + welcomeMessage);
+            gameServer.sendMessage("CHAT:" + welcomeMessage);
         }
-    }
-
-    private void debugGameState() {
-        System.out.println("=== СОСТОЯНИЕ ИГРЫ ===");
-        System.out.println("gameStarted: " + gameStarted);
-        System.out.println("isMyTurn: " + isMyTurn);
-        System.out.println("player.allShipsSunk(): " + (player != null ? player.allShipsSunk() : "player is null"));
-        System.out.println("enemy.allShipsSunk(): " + (enemy != null ? enemy.allShipsSunk() : "enemy is null"));
-        System.out.println("=== КОНЕЦ СОСТОЯНИЯ ===");
     }
 
     private void handleAttackMessage(String message) {
@@ -1323,13 +1139,6 @@ public class GameController extends BorderPane {
         });
     }
 
-
-
-    private void handleChatMessage(String message) {
-        String chatMessage = message.substring(5);
-        showInfo("Противник: " + chatMessage);
-    }
-
     private void handleWinMessage(String message) {
         System.out.println("[GameController] Получено сообщение о победе: " + message);
 
@@ -1343,21 +1152,6 @@ public class GameController extends BorderPane {
             }
         });
     }
-
-    private void handleCheckWinMessage() {
-        // Проверяем, все ли корабли противника потоплены
-        // В реальной игре нужно отслеживать попадания по противнику
-        // Здесь упрощенная логика
-
-        Platform.runLater(() -> {
-            // Отправляем текущее состояние
-            String stateMessage = "GAME_STATE:playing";
-            if (gameClient != null) gameClient.sendMessage(stateMessage);
-            if (gameServer != null) gameServer.sendMessage(stateMessage);
-        });
-    }
-
-
 
     private void showInfo(String message) {
         System.out.println("INFO: " + message);
@@ -1458,33 +1252,5 @@ public class GameController extends BorderPane {
         updateReadyButtonState();
 
         System.out.println("[GameController] Игра перезапущена");
-    }
-
-    private void updateGameStatus() {
-        Platform.runLater(() -> {
-            if (!gameStarted) {
-                if (iAmReady && !opponentReady) {
-                    statusLabel.setText("Вы готовы. Ожидаем противника...");
-                    statusLabel.setTextFill(Color.YELLOW);
-                } else if (!iAmReady && opponentReady) {
-                    statusLabel.setText("Противник готов. Расставьте корабли!");
-                    statusLabel.setTextFill(Color.ORANGE);
-                } else if (iAmReady && opponentReady) {
-                    statusLabel.setText("Оба готовы. Начинаем игру...");
-                    statusLabel.setTextFill(Color.GREEN);
-                } else {
-                    statusLabel.setText("Расставьте корабли");
-                    statusLabel.setTextFill(Color.WHITE);
-                }
-            } else {
-                if (isMyTurn) {
-                    statusLabel.setText("Ваш ход");
-                    statusLabel.setTextFill(Color.LIGHTGREEN);
-                } else {
-                    statusLabel.setText("Ход противника");
-                    statusLabel.setTextFill(Color.ORANGE);
-                }
-            }
-        });
     }
 }

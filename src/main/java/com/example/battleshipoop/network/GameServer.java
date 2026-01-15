@@ -87,6 +87,7 @@ public class GameServer {
 
         // Отправляем приветственное сообщение
         writer.println("CHAT:Система:Добро пожаловать в чат, " + username + "!");
+        writer.println("CHAT:Система:Теперь вы можете общаться с противником.");
 
         // Отправляем историю чата новому пользователю
         sendChatHistory(clientAddress);
@@ -97,26 +98,22 @@ public class GameServer {
             String chatMessage = message.substring(5);
             String username = usernames.getOrDefault(clientAddress, "Неизвестный");
 
-            // Форматируем сообщение
-            String formattedMessage = username + ": " + chatMessage;
+            System.out.println("Сервер: получено сообщение от " + username + ": " + chatMessage);
+
+            // Форматируем сообщение для отправки
+            String formattedMessage = username + ":" + chatMessage;
 
             // Сохраняем в историю
             chatMessages.add(formattedMessage);
 
-            // Рассылаем всем клиентам, включая отправителя
-            broadcastChatMessage(formattedMessage);
-
-            System.out.println("💬 [" + username + "]: " + chatMessage);
-        }
-    }
-
-    private void broadcastChatMessage(String message) {
-        for (ClientHandler client : clients) {
-            try {
-                // Отправляем сообщение всем клиентам
-                client.writer.println("CHAT:" + message);
-            } catch (Exception e) {
-                System.err.println("Ошибка отправки сообщения: " + e.getMessage());
+            // Рассылаем всем клиентам
+            for (ClientHandler client : clients) {
+                try {
+                    client.writer.println("CHAT:" + formattedMessage);
+                    System.out.println("Отправлено клиенту " + client.address + ": " + formattedMessage);
+                } catch (Exception e) {
+                    System.err.println("Ошибка отправки: " + e.getMessage());
+                }
             }
         }
     }
@@ -127,7 +124,11 @@ public class GameServer {
             // Отправляем последние 20 сообщений
             int start = Math.max(0, chatMessages.size() - 20);
             for (int i = start; i < chatMessages.size(); i++) {
-                client.writer.println("CHAT:История:" + chatMessages.get(i));
+                String message = chatMessages.get(i);
+                int colonIndex = message.indexOf(":");
+                String sender = message.substring(0, colonIndex);
+                String text = message.substring(colonIndex + 1);
+                client.writer.println("CHAT:История:" + sender + ": " + text);
             }
         }
     }
@@ -145,10 +146,6 @@ public class GameServer {
         if (out != null) {
             out.println(message);
         }
-    }
-
-    public void sendChatToAll(String message) {
-        broadcastChatMessage("Система: " + message);
     }
 
     public void stop() {
