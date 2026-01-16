@@ -15,6 +15,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class GameController extends BorderPane {
@@ -836,36 +838,158 @@ public class GameController extends BorderPane {
     }
 
     private void placeAllShipsAutomatically() {
+        System.out.println("Начинаем автоматическую расстановку кораблей...");
+
         // Сбрасываем игрока
         player = new Player("Игрок");
 
-        for (Ship ship : player.getShips()) {
+        // Расставляем корабли от большего к меньшему (это повышает вероятность успеха)
+        // Для этого нужно отсортировать корабли по размеру
+
+        // Создаем список кораблей
+        List<Ship> shipsToPlace = new ArrayList<>(player.getShips());
+
+        // Сортируем корабли по размеру (от большего к меньшему)
+        shipsToPlace.sort((s1, s2) -> Integer.compare(s2.getSize(), s1.getSize()));
+
+        System.out.println("Кораблей для расстановки: " + shipsToPlace.size());
+
+        for (Ship ship : shipsToPlace) {
+            System.out.println("Расставляем корабль размером " + ship.getSize() + "...");
+
             boolean placed = false;
             int attempts = 0;
+            int maxAttempts = 200; // Увеличиваем количество попыток
 
-            while (!placed && attempts < 100) {
+            while (!placed && attempts < maxAttempts) {
                 int x = (int) (Math.random() * 10);
                 int y = (int) (Math.random() * 10);
                 ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
 
-                if (player.getBoard().canPlaceShip(ship, x, y, direction)) {
-                    player.placeShip(ship, x, y, direction);
-                    placed = true;
+                // Проверяем, можно ли разместить корабль с учетом свободного пространства
+                if (canPlaceShipWithMargin(ship, x, y, direction)) {
+                    if (player.placeShip(ship, x, y, direction)) {
+                        placed = true;
+                        System.out.println("✓ Корабль размером " + ship.getSize() +
+                                " размещен в (" + x + "," + y + ") " +
+                                (direction == ShipDirection.HORIZONTAL ? "горизонтально" : "вертикально"));
+                    }
                 }
                 attempts++;
             }
 
             if (!placed) {
-                showError("Не удалось разместить корабль автоматически");
-                return;
+                System.out.println("✗ Не удалось разместить корабль размером " + ship.getSize());
+                // Попробуем без свободного пространства как запасной вариант
+                placed = tryPlaceShipWithoutMargin(ship);
+
+                if (!placed) {
+                    showError("Не удалось разместить корабль автоматически!");
+                    // Попробуем сбросить и начать заново
+                    resetAndTryAgain();
+                    return;
+                }
             }
         }
 
         updatePlayerGrid();
-        showInfo("Все корабли расставлены!");
+        showInfo("Все корабли расставлены с учетом свободного пространства!");
 
         // Обновляем состояние кнопки "Готов"
         updateReadyButtonState();
+    }
+
+    private boolean canPlaceShipWithMargin(Ship ship, int x, int y, ShipDirection direction) {
+        int size = ship.getSize();
+        GameBoard board = player.getBoard();
+
+        if (direction == ShipDirection.HORIZONTAL) {
+            // Проверяем, помещается ли корабль в поле
+            if (x + size > 10) return false;
+
+            // Проверяем клетки корабля и область вокруг
+            for (int i = -1; i <= size; i++) {
+                for (int j = -1; j <= 1; j++) {
+                    int checkX = x + i;
+                    int checkY = y + j;
+
+                    // Проверяем только в пределах поля
+                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
+                        // Если это клетка корабля (не буферная зона)
+                        if (j == 0 && i >= 0 && i < size) {
+                            // Проверяем, пуста ли клетка
+                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
+                                return false;
+                            }
+                        } else {
+                            // Это буферная зона - проверяем, нет ли там других кораблей
+                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
+        } else { // VERTICAL
+            // Проверяем, помещается ли корабль в поле
+            if (y + size > 10) return false;
+
+            // Проверяем клетки корабля и область вокруг
+            for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= size; j++) {
+                    int checkX = x + i;
+                    int checkY = y + j;
+
+                    // Проверяем только в пределах поля
+                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
+                        // Если это клетка корабля (не буферная зона)
+                        if (i == 0 && j >= 0 && j < size) {
+                            // Проверяем, пуста ли клетка
+                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
+                                return false;
+                            }
+                        } else {
+                            // Это буферная зона - проверяем, нет ли там других кораблей
+                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+
+    private boolean tryPlaceShipWithoutMargin(Ship ship) {
+        boolean placed = false;
+        int attempts = 0;
+
+        while (!placed && attempts < 100) {
+            int x = (int) (Math.random() * 10);
+            int y = (int) (Math.random() * 10);
+            ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
+
+            if (player.placeShip(ship, x, y, direction)) {
+                placed = true;
+                System.out.println("✓ Корабль размером " + ship.getSize() +
+                        " размещен БЕЗ свободного пространства");
+            }
+            attempts++;
+        }
+
+        return placed;
+    }
+
+    private void resetAndTryAgain() {
+        System.out.println("Пробуем расставить корабли заново...");
+        player = new Player("Игрок");
+
+        // Вызываем рекурсивно, но с ограничением глубины
+        placeAllShipsAutomatically();
     }
 
     private String getLocalIP() {
