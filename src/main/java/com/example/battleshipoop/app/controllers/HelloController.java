@@ -2,7 +2,7 @@ package com.example.battleshipoop.app.controllers;
 
 import com.example.battleshipoop.app.AppInfo;
 import com.example.battleshipoop.app.HelloApplication;
-import com.example.battleshipoop.app.AppProperties;
+import com.example.battleshipoop.app.utils.FXDesignHelper;
 import com.example.battleshipoop.Network;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,7 +23,7 @@ public class HelloController extends BorderPane {
     }
 
     private void initializeUI() {
-        setBackground(new Background(new BackgroundFill(Color.DARKSLATEGRAY, CornerRadii.EMPTY, Insets.EMPTY)));
+        setBackground(FXDesignHelper.createOceanBackground());
         this.app = HelloApplication.getInstance();
 
         VBox header = createHeader();
@@ -39,150 +39,154 @@ public class HelloController extends BorderPane {
     private VBox createHeader() {
         VBox header = new VBox(10);
         header.setAlignment(Pos.CENTER);
-        header.setPadding(new Insets(20));
+        header.setPadding(new Insets(30, 20, 20, 20));
+        header.setBackground(Background.EMPTY);
 
-        Label titleLabel = new Label(AppInfo.APP_NAME);
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 36));
-        titleLabel.setTextFill(Color.WHITE);
+        Label titleLabel = FXDesignHelper.createTitleLabel(AppInfo.APP_NAME);
 
-        Label subtitleLabel = new Label("Classic Naval Battle Game");
-        subtitleLabel.setFont(Font.font("Arial", 18));
-        subtitleLabel.setTextFill(Color.LIGHTGRAY);
+        Label subtitleLabel = FXDesignHelper.createSubtitleLabel("КЛАССИЧЕСКАЯ МОРСКАЯ БИТВА");
 
-        header.getChildren().addAll(titleLabel, subtitleLabel);
+        Region line = new Region();
+        line.setPrefHeight(3);
+        line.setBackground(new Background(new BackgroundFill(
+                FXDesignHelper.WAVE_BLUE,
+                CornerRadii.EMPTY,
+                null
+        )));
+        line.setMaxWidth(400);
+
+        header.getChildren().addAll(titleLabel, subtitleLabel, line);
         return header;
     }
 
     private VBox createCenterBox() {
-        VBox centerBox = new VBox(30);
+        VBox centerBox = new VBox(20);
         centerBox.setAlignment(Pos.CENTER);
         centerBox.setPadding(new Insets(40));
+        centerBox.setBackground(Background.EMPTY);
 
-        // Одиночная игра
-        Button singlePlayerBtn = createMenuButton("Одиночная игра", Color.web("#2E8B57"));
+        VBox buttonPanel = new VBox(15);
+        buttonPanel.setAlignment(Pos.CENTER);
+        buttonPanel.setPadding(new Insets(30));
+        buttonPanel.setMaxWidth(500);
+
+        Region depthPanel = FXDesignHelper.createDepthPanel();
+        StackPane panelContainer = new StackPane();
+        panelContainer.getChildren().addAll(depthPanel, buttonPanel);
+
+        Button singlePlayerBtn = FXDesignHelper.createNavButton("⚔  ОДИНОЧНАЯ ИГРА");
         singlePlayerBtn.setOnAction(e -> startSinglePlayerGame());
 
-        // Создание игры (Хост)
-        Button hostGameBtn = createMenuButton("Создать сетевую игру", Color.web("#3498DB"));
+        Button hostGameBtn = FXDesignHelper.createNavButton("🌐  СОЗДАТЬ ИГРУ (ХОСТ)");
         hostGameBtn.setOnAction(e -> startMultiplayerAsHost());
 
-        // Подключение к игре
-        Button connectGameBtn = createMenuButton("Подключиться к игре", Color.web("#9B59B6"));
+        Button connectGameBtn = FXDesignHelper.createNavButton("🔗  ПОДКЛЮЧИТЬСЯ К ИГРЕ");
         connectGameBtn.setOnAction(e -> connectToExistingGame());
 
-        VBox buttonBox = new VBox(20, singlePlayerBtn, hostGameBtn, connectGameBtn);
-        buttonBox.setAlignment(Pos.CENTER);
+        buttonPanel.getChildren().addAll(singlePlayerBtn, hostGameBtn, connectGameBtn);
 
-        // Информация для сетевой игры
         try {
             String ip = Network.getLocalIPAddress();
-            Label ipLabel = new Label("Ваш IP-адрес для подключения: " + ip);
-            ipLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12)); // Было: Font.font("Arial", 12, FontWeight.BOLD)
-            ipLabel.setTextFill(Color.LIGHTGREEN);
-            ipLabel.setPadding(new Insets(20, 0, 0, 0));
+            HBox ipBox = new HBox(10);
+            ipBox.setAlignment(Pos.CENTER);
+            ipBox.setPadding(new Insets(20, 0, 0, 0));
 
-            centerBox.getChildren().addAll(buttonBox, ipLabel);
+            Label ipIcon = new Label("🌐");
+            ipIcon.setFont(Font.font(20));
+            ipIcon.setTextFill(FXDesignHelper.LIGHT_BLUE);
+
+            Label ipLabel = new Label("Ваш IP: " + ip);
+            ipLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+            ipLabel.setTextFill(FXDesignHelper.GOLD);
+
+            ipBox.getChildren().addAll(ipIcon, ipLabel);
+            centerBox.getChildren().addAll(panelContainer, ipBox);
         } catch (Exception e) {
-            centerBox.getChildren().add(buttonBox);
+            centerBox.getChildren().add(panelContainer);
         }
 
         return centerBox;
     }
 
-    private Button createMenuButton(String text, Color color) {
+    private HBox createFooter() {
+        HBox footer = new HBox(20);
+        footer.setAlignment(Pos.CENTER);
+        footer.setPadding(new Insets(15));
+        footer.setBackground(new Background(new BackgroundFill(
+                Color.rgb(0, 0, 0, 0.3),
+                CornerRadii.EMPTY,
+                null
+        )));
+
+        Label versionLabel = new Label("Версия: " + AppInfo.VERSION);
+        versionLabel.setFont(Font.font("Segoe UI", 12));
+        versionLabel.setTextFill(Color.LIGHTGRAY);
+
+        Button settingsButton = createFooterButton("⚙  Настройки");
+        settingsButton.setOnAction(e -> navigateToSettings());
+
+        Button aboutButton = createFooterButton("ℹ  О программе");
+        aboutButton.setOnAction(e -> navigateToAbout());
+
+        Button exitButton = createFooterButton("🚪  Выход");
+        exitButton.setOnAction(e -> exitApplication());
+
+        footer.getChildren().addAll(versionLabel, settingsButton, aboutButton, exitButton);
+        return footer;
+    }
+
+    private Button createFooterButton(String text) {
         Button button = new Button(text);
-        button.setPrefSize(300, 50);
-        button.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        button.setTextFill(Color.WHITE);
-        button.setStyle(String.format(
-                "-fx-background-color: %s; -fx-background-radius: 10; -fx-border-radius: 10;",
-                color.toString().replace("0x", "#")
-        ));
+        button.setFont(Font.font("Segoe UI", 12));
+        button.setTextFill(Color.LIGHTGRAY);
+        button.setBackground(Background.EMPTY);
+        button.setBorder(Border.EMPTY);
+        button.setPadding(new Insets(5, 10, 5, 10));
 
-        button.setOnMouseEntered(e -> button.setStyle(
-                String.format("-fx-background-color: %s; -fx-background-radius: 10; -fx-border-radius: 10; -fx-scale-x: 1.05; -fx-scale-y: 1.05;",
-                        color.brighter().toString().replace("0x", "#"))
-        ));
+        button.setOnMouseEntered(e -> {
+            button.setTextFill(Color.WHITE);
+            button.setBackground(new Background(new BackgroundFill(
+                    Color.rgb(255, 255, 255, 0.1),
+                    new CornerRadii(5),
+                    null
+            )));
+        });
 
-        button.setOnMouseExited(e -> button.setStyle(
-                String.format("-fx-background-color: %s; -fx-background-radius: 10; -fx-border-radius: 10; -fx-scale-x: 1.0; -fx-scale-y: 1.0;",
-                        color.toString().replace("0x", "#"))
-        ));
+        button.setOnMouseExited(e -> {
+            button.setTextFill(Color.LIGHTGRAY);
+            button.setBackground(Background.EMPTY);
+        });
 
         return button;
     }
 
-    private HBox createFooter() {
-        HBox footer = new HBox();
-        footer.setAlignment(Pos.CENTER);
-        footer.setPadding(new Insets(15));
-        footer.setStyle("-fx-background-color: rgba(0, 0, 0, 0.3);");
-
-        Label versionLabel = new Label("Версия: " + AppInfo.VERSION);
-        versionLabel.setFont(Font.font("Arial", 12));
-        versionLabel.setTextFill(Color.LIGHTGRAY);
-
-        Button settingsButton = new Button("Настройки");
-        settingsButton.setStyle("-fx-background-color: transparent; -fx-text-fill: lightgray; -fx-border-color: transparent;");
-        settingsButton.setOnAction(e -> navigateToSettings());
-
-        Button aboutButton = new Button("О программе");
-        aboutButton.setStyle("-fx-background-color: transparent; -fx-text-fill: lightgray; -fx-border-color: transparent;");
-        aboutButton.setOnAction(e -> navigateToAbout());
-
-        Button exitButton = new Button("Выход");
-        exitButton.setStyle("-fx-background-color: transparent; -fx-text-fill: lightgray; -fx-border-color: transparent;");
-        exitButton.setOnAction(e -> exitApplication());
-
-        footer.getChildren().addAll(versionLabel, createSeparator(), settingsButton,
-                createSeparator(), aboutButton, createSeparator(), exitButton);
-        footer.setSpacing(10);
-
-        return footer;
-    }
-
-    private Label createSeparator() {
-        Label separator = new Label("|");
-        separator.setTextFill(Color.LIGHTGRAY);
-        return separator;
-    }
-
     private void startSinglePlayerGame() {
-        // Просто создаем и показываем AIController
         AIController aiController = new AIController();
         Scene scene = new Scene(aiController, 1200, 800);
         Stage stage = new Stage();
         stage.setScene(scene);
         stage.setTitle("Морской бой - Одиночная игра");
         stage.show();
-
-        // Закрываем главное меню
         app.getPrimaryStage().hide();
     }
 
     private void startMultiplayerAsHost() {
-        // Создаем GameController в режиме хоста
         GameController gameController = new GameController("host");
         Scene scene = new Scene(gameController, 1200, 800);
         Stage stage = new Stage();
         stage.setScene(scene);
         stage.setTitle("Морской бой - Создание игры");
         stage.show();
-
-        // Закрываем главное меню
         app.getPrimaryStage().hide();
     }
 
     private void connectToExistingGame() {
-        // Создаем GameController в режиме клиента
         GameController gameController = new GameController("client");
         Scene scene = new Scene(gameController, 1200, 800);
         Stage stage = new Stage();
         stage.setScene(scene);
         stage.setTitle("Морской бой - Подключение к игре");
         stage.show();
-
-        // Закрываем главное меню
         app.getPrimaryStage().hide();
     }
 

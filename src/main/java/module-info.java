@@ -15,4 +15,6 @@ module com.example.battleshipoop {
     exports com.example.battleshipoop.app.controllers;
     exports com.example.battleshipoop.models;
     exports com.example.battleshipoop.network;
+    exports com.example.battleshipoop.app.utils;
+    opens com.example.battleshipoop.app.utils to javafx.fxml;
 }
