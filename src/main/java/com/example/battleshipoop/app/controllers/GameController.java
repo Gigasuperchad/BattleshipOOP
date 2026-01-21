@@ -300,40 +300,43 @@ public class GameController extends BorderPane {
         chatInitialized = true;
     }
 
+    private String getUsername() {
+        if (connectionType != null) {
+            if (connectionType.equals("host")) {
+                return "Хост";
+            } else if (connectionType.equals("client")) {
+                return "Клиент";
+            }
+        }
+        return "Игрок";
+    }
+
     private void sendChatMessage() {
         String message = chatInput.getText().trim();
         if (!message.isEmpty()) {
-            // Добавляем сообщение в чат сразу для всех
-            chatArea.appendText("Вы: " + message + "\n");
+            String username = getUsername();
 
-            // Отправляем через сетевое соединение
-            if (gameClient != null && gameClient.isConnected()) {
-                gameClient.sendChatMessage(message);
-            } else if (gameServer != null && gameServer.isRunning()) {
-                // Хост отправляет сообщение на сервер
-                gameServer.sendMessage("CHAT:" + message);
+            // Временное решение: хост сразу показывает свое сообщение
+            if (gameServer != null && gameServer.isRunning()) {
+                // Хост - сразу добавляем в чат
+                chatArea.appendText("Вы (" + username + "): " + message + "\n");
+
+                // И отправляем
+                gameServer.sendMessage("CHATMSG:" + username + ":" + message);
+                chatInput.clear();
             }
-
-            chatInput.clear();
+            else if (gameClient != null && gameClient.isConnected()) {
+                // Клиент - только отправляем
+                gameClient.sendMessage("CHATMSG:" + username + ":" + message);
+                chatInput.clear();
+            }
         }
     }
 
     private void handleChatMessage(String sender, String message) {
         Platform.runLater(() -> {
-            // Для клиента: добавляем все сообщения, кроме своих
-            if (gameClient != null && gameClient.isConnected()) {
-                // Пропускаем сообщения от "Вы" (они уже добавлены при отправке)
-                if (!sender.equals("Вы")) {
-                    chatArea.appendText(sender + ": " + message + "\n");
-                }
-            }
-            // Для хоста: сообщения уже добавлены при отправке,
-            // получаем только сообщения от клиента
-            else if (gameServer != null && gameServer.isRunning()) {
-                if (!sender.equals("Вы") && !sender.equals("Хост")) {
-                    chatArea.appendText(sender + ": " + message + "\n");
-                }
-            }
+            System.out.println("Добавляем в чат: " + sender + ": " + message);
+            chatArea.appendText(sender + ": " + message + "\n");
         });
     }
 
@@ -710,8 +713,8 @@ public class GameController extends BorderPane {
             gameServer.start(5555, new GameServer.GameMessageListener() {
                 @Override
                 public void onMessageReceived(String message) {
-                    System.out.println("Сервер получил: " + message);
-                    handleMessage(message);
+                    System.out.println("Хост получил от сервера: " + message);
+                    handleMessage(message); // Важно: вызываем handleMessage
                 }
 
                 @Override
@@ -719,16 +722,11 @@ public class GameController extends BorderPane {
                     Platform.runLater(() -> {
                         System.out.println("Клиент подключен: " + clientAddress);
                         statusLabel.setText("Противник подключен: " + clientAddress);
-                        playerLabel.setText("Хост (Ожидание готовности)");
-                        connectionType = "host";
 
                         // Приветственное сообщение в чат
                         if (chatArea != null) {
                             chatArea.appendText("⚡ Противник подключился к игре\n");
-                            chatArea.appendText("⚡ Начинайте общение в чате\n");
                         }
-
-                        showInfo("Противник подключился! Расставьте корабли и нажмите 'Готов'.");
                     });
                 }
 
@@ -1013,19 +1011,45 @@ public class GameController extends BorderPane {
                     handleResultMessage(message);
                 } else if (message.startsWith("WIN:")) {
                     handleWinMessage(message);
+                } else if (message.startsWith("CHATMSG:")) {
+                    // Это форматированное сообщение для отображения
+                    String chatContent = message.substring(8); // Убираем "CHATMSG:"
+                    System.out.println("Обработка CHATMSG: " + chatContent);
+
+                    int colonIndex = chatContent.indexOf(":");
+                    if (colonIndex != -1) {
+                        String sender = chatContent.substring(0, colonIndex);
+                        String chatMessage = chatContent.substring(colonIndex + 1);
+
+                        // Определяем, наше ли это сообщение
+                        String myUsername = getUsername();
+                        System.out.println("Отправитель: " + sender + ", я: " + myUsername);
+
+                        if (sender.equals(myUsername)) {
+                            // Это наше сообщение, показываем как "Вы"
+                            chatArea.appendText("Вы (" + sender + "): " + chatMessage + "\n");
+                        } else {
+                            // Это сообщение от противника
+                            chatArea.appendText(sender + ": " + chatMessage + "\n");
+                        }
+                    }
                 } else if (message.startsWith("CHAT:")) {
-                    // Обработка сообщений чата
+                    // Это сырое сообщение - для совместимости
                     String chatContent = message.substring(5);
-                    String sender = "Противник";
-                    String chatMessage = chatContent;
+                    System.out.println("Обработка CHAT (совместимость): " + chatContent);
 
                     if (chatContent.contains(":")) {
                         int colonIndex = chatContent.indexOf(":");
-                        sender = chatContent.substring(0, colonIndex);
-                        chatMessage = chatContent.substring(colonIndex + 1);
-                    }
+                        String sender = chatContent.substring(0, colonIndex);
+                        String chatMessage = chatContent.substring(colonIndex + 1);
 
-                    handleChatMessage(sender, chatMessage);
+                        String myUsername = getUsername();
+                        if (sender.equals(myUsername)) {
+                            chatArea.appendText("Вы (" + sender + "): " + chatMessage + "\n");
+                        } else {
+                            chatArea.appendText(sender + ": " + chatMessage + "\n");
+                        }
+                    }
                 } else if (message.equals("READY")) {
                     handleReadyMessage("READY:unknown");
                 }

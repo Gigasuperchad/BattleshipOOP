@@ -56,8 +56,6 @@ public class GameClient {
 
     private void handleChatMessage(String message) {
         String chatContent = message.substring(5); // Убираем "CHAT:"
-
-        // Сообщение приходит в формате "отправитель:текст"
         String sender = "Система";
         String chatMessage = chatContent;
 

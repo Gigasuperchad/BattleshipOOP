@@ -94,26 +94,64 @@ public class GameServer {
     }
 
     private void handleChatMessage(String clientAddress, String message) {
-        if (message.startsWith("CHAT:")) {
+        if (message.startsWith("CHATMSG:")) {
+            // Это уже форматированное сообщение
+            String chatContent = message.substring(8);
+            System.out.println("Сервер рассылает CHATMSG: " + chatContent);
+
+            // Рассылаем всем клиентам
+            broadcastMessage("CHATMSG:" + chatContent);
+
+            // И отправляем хозяину сервера (хосту) тоже
+            if (listener != null) {
+                System.out.println("Отправляем хосту: CHATMSG:" + chatContent);
+                listener.onMessageReceived("CHATMSG:" + chatContent);
+            }
+
+        } else if (message.startsWith("CHAT:")) {
+            // Это сырое сообщение (устаревший формат)
             String chatMessage = message.substring(5);
-            String username = usernames.getOrDefault(clientAddress, "Неизвестный");
+            String username = usernames.getOrDefault(clientAddress, "Игрок_1");
 
-            System.out.println("Сервер: получено сообщение от " + username + ": " + chatMessage);
+            System.out.println("Сервер: сырое сообщение от " + username + ": " + chatMessage);
 
-            // Форматируем сообщение для отправки
+            // Преобразуем в формат CHATMSG
             String formattedMessage = username + ":" + chatMessage;
 
             // Сохраняем в историю
-            chatMessages.add(formattedMessage);
+            synchronized (chatMessages) {
+                chatMessages.add(formattedMessage);
+            }
 
             // Рассылаем всем клиентам
-            for (ClientHandler client : clients) {
-                try {
-                    client.writer.println("CHAT:" + formattedMessage);
-                    System.out.println("Отправлено клиенту " + client.address + ": " + formattedMessage);
-                } catch (Exception e) {
-                    System.err.println("Ошибка отправки: " + e.getMessage());
-                }
+            broadcastMessage("CHATMSG:" + formattedMessage);
+
+            // И отправляем хозяину сервера (хосту)
+            if (listener != null) {
+                System.out.println("Отправляем хосту: CHATMSG:" + formattedMessage);
+                listener.onMessageReceived("CHATMSG:" + formattedMessage);
+            }
+        }
+    }
+
+    // Добавьте метод для рассылки сообщений всем клиентам
+    private void broadcastMessage(String message) {
+        System.out.println("Броадкаст сообщения: " + message + " для " + clients.size() + " клиентов");
+
+        if (clients.isEmpty()) {
+            System.out.println("Нет подключенных клиентов для рассылки");
+            return;
+        }
+
+        List<ClientHandler> clientsCopy = new ArrayList<>(clients);
+        for (ClientHandler client : clientsCopy) {
+            try {
+                System.out.println("Отправка клиенту " + client.address + ": " + message);
+                client.writer.println(message);
+                client.writer.flush();
+            } catch (Exception e) {
+                System.err.println("Ошибка отправки клиенту " + client.address + ": " + e.getMessage());
+                clients.remove(client);
             }
         }
     }
@@ -132,6 +170,32 @@ public class GameServer {
             }
         }
     }
+
+    public void sendChatMessage(String message) {
+        System.out.println("Сервер: отправка сообщения от хоста: " + message);
+
+        String formattedMessage = "Хост:" + message;
+
+        // Сохраняем в историю
+        synchronized (chatMessages) {
+            chatMessages.add(formattedMessage);
+        }
+
+        // Рассылаем всем подключенным клиентам
+        if (!clients.isEmpty()) {
+            broadcastMessage("CHAT:" + formattedMessage);
+            System.out.println("Сообщение отправлено " + clients.size() + " клиентам");
+        } else {
+            System.out.println("Нет подключенных клиентов для отправки сообщения");
+        }
+
+        // Также отправляем сообщение самому хосту через listener
+        if (listener != null) {
+            listener.onMessageReceived("CHAT:" + formattedMessage);
+        }
+    }
+
+
 
     private ClientHandler findClient(String clientAddress) {
         for (ClientHandler client : clients) {
