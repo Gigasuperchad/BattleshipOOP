@@ -1,5 +1,6 @@
 package com.example.battleshipoop.app.controllers;
 
+import com.example.battleshipoop.ViewObject;
 import com.example.battleshipoop.app.AppInfo;
 import com.example.battleshipoop.app.HelloApplication;
 import com.example.battleshipoop.app.AppProperties;
@@ -148,16 +149,25 @@ public class HelloController extends BorderPane {
     }
 
     private void startSinglePlayerGame() {
-        // Просто создаем и показываем AIController
-        AIController aiController = new AIController();
-        Scene scene = new Scene(aiController, 1200, 800);
-        Stage stage = new Stage();
-        stage.setScene(scene);
-        stage.setTitle("Морской бой - Одиночная игра");
-        stage.show();
+        // Создаем ViewObject для AIController
+        ViewObject aiView = new ViewObject(
+                "AIController",
+                "Игра против ИИ",
+                false,
+                o -> true,
+                null
+        );
 
-        // Закрываем главное меню
-        app.getPrimaryStage().hide();
+        // Устанавливаем действие при навигации
+        aiView.setOnNavigate(() -> {
+            HelloApplication app = HelloApplication.getInstance();
+            if (app != null && app.getNavigator() != null) {
+                app.getNavigator().navigate(aiView);
+            }
+        });
+
+        // Выполняем навигацию
+        aiView.navigate();
     }
 
     private void startMultiplayerAsHost() {
