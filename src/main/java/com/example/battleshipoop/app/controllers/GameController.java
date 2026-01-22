@@ -1,8 +1,10 @@
 package com.example.battleshipoop.app.controllers;
 
 import com.example.battleshipoop.app.HelloApplication;
-import com.example.battleshipoop.app.utils.FXDesignHelper;
 import com.example.battleshipoop.models.*;
+import com.example.battleshipoop.network.GameClient;
+import com.example.battleshipoop.network.GameServer;
+import com.example.battleshipoop.app.ChatManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -10,62 +12,42 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.CycleMethod;
-import javafx.scene.paint.LinearGradient;
-import javafx.scene.paint.Stop;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 public class GameController extends BorderPane {
-    // Игровые компоненты
+    private GameClient gameClient;
+    private GameServer gameServer;
     private Player player;
     private Player enemy;
     private GridPane playerGrid;
     private GridPane enemyGrid;
-
-    // UI элементы
     private Label statusLabel;
     private Label playerLabel;
-    private Label turnIndicator;
-    private Label playerShipsLabel;
-    private Label enemyShipsLabel;
-
-    // Чат компоненты
+    private boolean isMyTurn;
+    private boolean gameStarted;
+    private String connectionType; // "host" или "client"
+    private boolean opponentReady = false;
+    private boolean iAmReady = false;
+    private int enemyHits = 0;
+    private final int totalEnemyCells = 20; // 10 кораблей у противника
+    private String gameMode = "single"; // "single", "host", "client"
+    private boolean connectionDialogShown = false;
+    private ChatManager chatManager;
+    private boolean chatLaunched = false;
     private VBox chatPanel;
     private TextArea chatArea;
     private TextField chatInput;
+    private Button chatSendButton;
     private boolean chatInitialized = false;
 
-    // Игровое состояние
-    private boolean isMyTurn = false;
-    private boolean gameStarted = false;
-    private boolean iAmReady = false;
-    private boolean opponentReady = false;
-    private String gameMode = "single";
-    private int enemyHits = 0;
-    private final int totalEnemyCells = 20;
-    private boolean connectionDialogShown = false;
-    private String connectionType = ""; // "host" или "client"
-
-    // Цвета для клеток
-    private Color hitColor = Color.rgb(220, 53, 69);
-    private Color missColor = Color.rgb(248, 249, 250);
-    private Color shipColor = Color.rgb(169, 169, 169);
-    private Color sunkColor = Color.rgb(139, 0, 0);
-    private Color emptyColor = Color.rgb(173, 216, 230, 0.8);
-
-    // Конструкторы
     public GameController(String gameMode) {
         this.gameMode = gameMode;
-        System.out.println("Инициализация GameController в режиме: " + gameMode);
-
-        // Обновляем тему
-        FXDesignHelper.updateTheme();
+        System.out.println("[GameController] Создан в режиме: " + gameMode);
 
         if (gameMode.equals("host")) {
             connectionType = "host";
@@ -73,541 +55,47 @@ public class GameController extends BorderPane {
             connectionType = "client";
         }
 
-        initializeUI(); // Сначала инициализируем UI
-        initializeGame(); // Затем инициализируем игровые объекты
-        initializeForMode(); // Настраиваем для режима
+        this.chatManager = new ChatManager();
 
-        // Обновляем счетчики после инициализации
-        Platform.runLater(() -> updateShipCounters());
+        initializeUI();
+        initializeGame();
+
+        // Автоматически запускаем действия для режима
+        initializeForMode();
     }
 
+    // Оставьте старый конструктор для обратной совместимости
     public GameController() {
-        this("single");
+        this("single"); // По умолчанию одиночная игра
     }
 
-    // Инициализация игры
-    private void initializeGame() {
-        player = new Player("Вы");
-        enemy = new Player("Противник");
-
-        // Автоматическая расстановка кораблей
-        placeAllShipsAutomatically();
-    }
-
-    // Инициализация UI
     private void initializeUI() {
-        // Устанавливаем фон
-        setBackground(FXDesignHelper.createOceanBackground());
+        setBackground(new Background(new BackgroundFill(Color.DARKSLATEGRAY, CornerRadii.EMPTY, Insets.EMPTY)));
 
-        // Создаем верхнюю панель
-        VBox topPanel = createTopPanel();
+        HBox topPanel = createTopPanel();
         setTop(topPanel);
 
-        // Создаем центральную игровую область
-        HBox centerArea = createCenterArea();
-        setCenter(centerArea);
+        HBox gameArea = createGameArea();
+        setCenter(gameArea);
 
-        // Создаем нижнюю панель управления
         HBox bottomPanel = createBottomPanel();
         setBottom(bottomPanel);
     }
 
-    // Создание верхней панели
-    private VBox createTopPanel() {
-        VBox topPanel = new VBox(10);
-        topPanel.setAlignment(Pos.CENTER);
-        topPanel.setPadding(new Insets(20));
-        topPanel.setBackground(Background.EMPTY);
+    public void setGameMode(String mode) {
+        this.gameMode = mode;
+        System.out.println("Установлен режим игры: " + mode);
 
-        // Заголовок в зависимости от режима
-        String title = "";
-        if (gameMode.equals("host")) {
-            title = "🌐  СОЗДАНИЕ ИГРЫ (ХОСТ)";
-        } else if (gameMode.equals("client")) {
-            title = "🔗  ПОДКЛЮЧЕНИЕ К ИГРЕ";
-        } else {
-            title = "⚔  ОДИНОЧНАЯ ИГРА";
-        }
-
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 32));
-        titleLabel.setTextFill(FXDesignHelper.Colors.TEXT_WHITE);
-
-        // Эффект свечения для заголовка
-        javafx.scene.effect.DropShadow glow = new javafx.scene.effect.DropShadow();
-        glow.setColor(FXDesignHelper.Colors.WAVE_BLUE);
-        glow.setRadius(15);
-        glow.setSpread(0.3);
-        titleLabel.setEffect(glow);
-
-        // Панель состояния
-        HBox statusPanel = new HBox(20);
-        statusPanel.setAlignment(Pos.CENTER);
-        statusPanel.setPadding(new Insets(10, 0, 0, 0));
-
-        playerLabel = new Label("Игрок: Вы");
-        playerLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
-        playerLabel.setTextFill(FXDesignHelper.Colors.LIGHT_BLUE);
-
-        turnIndicator = new Label("⚓  Расставьте корабли");
-        turnIndicator.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
-        turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-
-        statusLabel = new Label("");
-        statusLabel.setFont(Font.font("Segoe UI", 14));
-        statusLabel.setTextFill(FXDesignHelper.Colors.TEXT_GOLD);
-
-        statusPanel.getChildren().addAll(playerLabel, turnIndicator, statusLabel);
-
-        // Информация о кораблях
-        HBox shipsInfo = new HBox(30);
-        shipsInfo.setAlignment(Pos.CENTER);
-        shipsInfo.setPadding(new Insets(10, 0, 0, 0));
-
-        playerShipsLabel = createShipInfoLabel("Ваши корабли: 10/10", FXDesignHelper.Colors.LIGHT_BLUE);
-        enemyShipsLabel = createShipInfoLabel("Корабли противника: 10/10", Color.rgb(255, 107, 107));
-
-        shipsInfo.getChildren().addAll(playerShipsLabel, enemyShipsLabel);
-
-        topPanel.getChildren().addAll(titleLabel, statusPanel, shipsInfo);
-        return topPanel;
-    }
-
-    private Label createShipInfoLabel(String text, Color color) {
-        Label label = new Label(text);
-        label.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
-        label.setTextFill(color);
-        label.setPadding(new Insets(5, 15, 5, 15));
-        label.setBackground(new Background(new BackgroundFill(
-                color.deriveColor(0, 1, 1, 0.1),
-                new CornerRadii(5),
-                null
-        )));
-        return label;
-    }
-
-    // Создание центральной области
-    private HBox createCenterArea() {
-        HBox centerArea = new HBox(30);
-        centerArea.setAlignment(Pos.CENTER);
-        centerArea.setPadding(new Insets(20));
-
-        // Игровые поля
-        VBox playerField = createGameField("🚢  ВАШЕ ПОЛЕ", true);
-        VBox enemyField = createGameField("🎯  ПОЛЕ ПРОТИВНИКА", false);
-
-        // Для сетевой игры добавляем чат
-        if (gameMode.equals("host") || gameMode.equals("client")) {
-            chatPanel = createChatPanel();
-            centerArea.getChildren().addAll(playerField, enemyField, chatPanel);
-        } else {
-            centerArea.getChildren().addAll(playerField, enemyField);
-        }
-
-        return centerArea;
-    }
-
-    // Создание панели чата
-    private VBox createChatPanel() {
-        VBox chatPanel = new VBox(10);
-        chatPanel.setPrefWidth(300);
-        chatPanel.setPadding(new Insets(15));
-
-        // Фон панели чата
-        LinearGradient chatGradient = new LinearGradient(
-                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.rgb(25, 35, 55, 0.95)),
-                new Stop(1, Color.rgb(15, 25, 45, 0.95))
-        );
-
-        chatPanel.setBackground(new Background(new BackgroundFill(
-                chatGradient,
-                new CornerRadii(10),
-                null
-        )));
-
-        chatPanel.setBorder(new Border(new BorderStroke(
-                FXDesignHelper.Colors.WAVE_BLUE,
-                BorderStrokeStyle.SOLID,
-                new CornerRadii(10),
-                new BorderWidths(2)
-        )));
-
-        // Эффект свечения
-        javafx.scene.effect.DropShadow glow = new javafx.scene.effect.DropShadow();
-        glow.setColor(FXDesignHelper.Colors.WAVE_BLUE.deriveColor(0, 1, 1, 0.3));
-        glow.setRadius(10);
-        chatPanel.setEffect(glow);
-
-        // Заголовок чата
-        Label chatTitle = new Label("💬  ИГРОВОЙ ЧАТ");
-        chatTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
-        chatTitle.setTextFill(FXDesignHelper.Colors.WAVE_BLUE);
-
-        // Область сообщений
-        chatArea = new TextArea();
-        chatArea.setEditable(false);
-        chatArea.setWrapText(true);
-        chatArea.setPrefHeight(400);
-        chatArea.setStyle(
-                "-fx-control-inner-background: #2C3E50; " +
-                        "-fx-text-fill: #ECF0F1; " +
-                        "-fx-font-family: 'Segoe UI'; " +
-                        "-fx-font-size: 12px; " +
-                        "-fx-border-color: #4CAF50; " +
-                        "-fx-border-radius: 5;"
-        );
-
-        // Панель ввода
-        HBox inputBox = new HBox(5);
-        inputBox.setPadding(new Insets(5, 0, 0, 0));
-
-        chatInput = new TextField();
-        chatInput.setPromptText("Введите сообщение...");
-        chatInput.setPrefWidth(200);
-        chatInput.setStyle(
-                "-fx-background-color: #34495E; " +
-                        "-fx-text-fill: white; " +
-                        "-fx-prompt-text-fill: #95A5A6; " +
-                        "-fx-border-color: #4CAF50; " +
-                        "-fx-border-width: 1;"
-        );
-
-        // Обработка нажатия Enter
-        chatInput.setOnAction(e -> sendChatMessage());
-
-        Button chatSendButton = new Button("➤");
-        chatSendButton.setStyle(
-                "-fx-background-color: #4CAF50; " +
-                        "-fx-text-fill: white; " +
-                        "-fx-font-weight: bold; " +
-                        "-fx-min-width: 40;"
-        );
-        chatSendButton.setOnAction(e -> sendChatMessage());
-
-        inputBox.getChildren().addAll(chatInput, chatSendButton);
-
-        chatPanel.getChildren().addAll(chatTitle, chatArea, inputBox);
-
-        // Инициализируем чат
-        initializeChat();
-
-        return chatPanel;
-    }
-
-    // Создание игрового поля
-    private VBox createGameField(String title, boolean isPlayerField) {
-        VBox fieldContainer = new VBox(15);
-        fieldContainer.setAlignment(Pos.CENTER);
-        fieldContainer.setPadding(new Insets(20));
-
-        // Создаем панель с эффектом глубины
-        StackPane panelContainer = new StackPane();
-
-        // Фон панели с градиентом
-        LinearGradient panelGradient = new LinearGradient(
-                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, FXDesignHelper.Colors.PANEL_BG),
-                new Stop(1, FXDesignHelper.Colors.PANEL_BG.darker())
-        );
-
-        Region backgroundPanel = new Region();
-        backgroundPanel.setBackground(new Background(new BackgroundFill(
-                panelGradient,
-                new CornerRadii(15),
-                null
-        )));
-
-        // Обводка панели
-        backgroundPanel.setBorder(new Border(new BorderStroke(
-                isPlayerField ? FXDesignHelper.Colors.LIGHT_BLUE : Color.rgb(255, 107, 107),
-                BorderStrokeStyle.SOLID,
-                new CornerRadii(15),
-                new BorderWidths(3)
-        )));
-
-        // Эффект тени
-        javafx.scene.effect.DropShadow shadow = new javafx.scene.effect.DropShadow();
-        shadow.setColor(Color.rgb(0, 0, 0, 0.3));
-        shadow.setRadius(15);
-        shadow.setOffsetX(5);
-        shadow.setOffsetY(5);
-        backgroundPanel.setEffect(shadow);
-
-        // Заголовок поля
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
-        titleLabel.setTextFill(isPlayerField ?
-                FXDesignHelper.Colors.LIGHT_BLUE :
-                Color.rgb(255, 107, 107));
-
-        // Создаем сетку
-        GridPane grid = new GridPane();
-        grid.setHgap(2);
-        grid.setVgap(2);
-        grid.setAlignment(Pos.CENTER);
-        grid.setPadding(new Insets(10));
-
-        // Создаем координатную сетку
-        createCoordinateGrid(grid, isPlayerField);
-
-        // Сохраняем ссылки на сетки
-        if (isPlayerField) {
-            playerGrid = grid;
-        } else {
-            enemyGrid = grid;
-        }
-
-        // Добавляем элементы на панель
-        fieldContainer.getChildren().addAll(titleLabel, grid);
-        panelContainer.getChildren().addAll(backgroundPanel, fieldContainer);
-
-        return fieldContainer;
-    }
-
-    // Создание координатной сетки
-    private void createCoordinateGrid(GridPane grid, boolean isPlayerField) {
-        // Добавляем буквенные координаты (слева)
-        for (int row = 0; row < 10; row++) {
-            Label rowLabel = new Label(String.valueOf((char) ('А' + row)));
-            rowLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
-            rowLabel.setTextFill(FXDesignHelper.Colors.TEXT_GOLD);
-            grid.add(rowLabel, 0, row + 1);
-        }
-
-        // Добавляем числовые координаты (сверху)
-        for (int col = 0; col < 10; col++) {
-            Label colLabel = new Label(String.valueOf(col + 1));
-            colLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
-            colLabel.setTextFill(FXDesignHelper.Colors.TEXT_GOLD);
-            grid.add(colLabel, col + 1, 0);
-        }
-
-        // Создаем игровые клетки
-        for (int row = 0; row < 10; row++) {
-            for (int col = 0; col < 10; col++) {
-                Rectangle cell = new Rectangle(35, 35);
-                cell.setFill(emptyColor);
-                cell.setStroke(FXDesignHelper.Colors.CELL_BORDER);
-                cell.setStrokeWidth(1.5);
-
-                final int x = col;
-                final int y = row;
-
-                if (isPlayerField) {
-                    // Клетки своего поля
-                    cell.setOnMouseEntered(e -> {
-                        if (!gameStarted) {
-                            cell.setFill(FXDesignHelper.Colors.CELL_BORDER.deriveColor(0, 1, 1, 0.3));
-                        }
-                    });
-
-                    cell.setOnMouseExited(e -> {
-                        if (!gameStarted) {
-                            cell.setFill(emptyColor);
-                        }
-                    });
-
-                    cell.setOnMouseClicked(e -> {
-                        if (!gameStarted) {
-                            placeAllShipsAutomatically();
-                            updatePlayerGrid();
-
-                            if (player.allShipsPlaced()) {
-                                setStatus("✅ Все корабли расставлены!", FXDesignHelper.Colors.SUCCESS);
-                                sendReadySignal();
-                            }
-                        }
-                    });
-                } else {
-                    // Клетки поля противника
-                    cell.setOnMouseEntered(e -> {
-                        if (gameStarted && isMyTurn && isEmptyCell(cell)) {
-                            cell.setFill(Color.rgb(255, 255, 100, 0.5));
-                        }
-                    });
-
-                    cell.setOnMouseExited(e -> {
-                        if (gameStarted && isMyTurn && isEmptyCell(cell)) {
-                            cell.setFill(emptyColor);
-                        }
-                    });
-
-                    cell.setOnMouseClicked(e -> {
-                        if (gameStarted && isMyTurn) {
-                            attackEnemy(x, y);
-                        } else if (!gameStarted) {
-                            showAlert("Игра не начата", "Дождитесь начала игры!");
-                        } else if (!isMyTurn) {
-                            showAlert("Не ваш ход", "Сейчас ход противника!");
-                        }
-                    });
-                }
-
-                grid.add(cell, col + 1, row + 1);
-            }
-        }
-    }
-
-    // Проверка, пустая ли клетка
-    private boolean isEmptyCell(Rectangle cell) {
-        Color fill = (Color) cell.getFill();
-        return fill.equals(emptyColor);
-    }
-
-    // Создание нижней панели
-    private HBox createBottomPanel() {
-        HBox bottomPanel = new HBox(20);
-        bottomPanel.setAlignment(Pos.CENTER);
-        bottomPanel.setPadding(new Insets(20));
-
-        // Левая группа кнопок
-        VBox leftButtons = new VBox(10);
-        leftButtons.setAlignment(Pos.CENTER);
-
-        Button backButton = createStyledButton("◀  В главное меню", FXDesignHelper.Colors.ERROR);
-        backButton.setOnAction(e -> goBack());
-
-        Button restartButton = createStyledButton("🔄  Новая игра", FXDesignHelper.Colors.WARNING);
-        restartButton.setOnAction(e -> restartGame());
-
-        leftButtons.getChildren().addAll(backButton, restartButton);
-
-        // Центральная группа кнопок
-        VBox centerButtons = new VBox(10);
-        centerButtons.setAlignment(Pos.CENTER);
-
-        Button autoPlaceButton = createStyledButton("⚡  Авторасстановка", FXDesignHelper.Colors.WARNING);
-        autoPlaceButton.setOnAction(e -> {
-            placeAllShipsAutomatically();
-            updatePlayerGrid();
-            setStatus("Корабли расставлены автоматически!", FXDesignHelper.Colors.SUCCESS);
-            updateReadyButtonState();
-        });
-
-        // Кнопка готовности для сетевой игры
-        if (gameMode.equals("host") || gameMode.equals("client")) {
-            Button readyButton = createStyledButton("✅  Готов к игре", FXDesignHelper.Colors.SUCCESS);
-            readyButton.setId("readyButton");
-            readyButton.setOnAction(e -> {
-                if (player.allShipsPlaced()) {
-                    sendReadySignal();
-                    updateReadyButtonState();
-                } else {
-                    setStatus("Сначала расставьте все корабли!", FXDesignHelper.Colors.ERROR);
-                }
-            });
-            centerButtons.getChildren().add(readyButton);
-        }
-
-        // Кнопка начала игры для одиночной игры
-        if (gameMode.equals("single")) {
-            Button startButton = createStyledButton("▶  Начать игру", FXDesignHelper.Colors.SUCCESS);
-            startButton.setOnAction(e -> startSinglePlayerGame());
-            centerButtons.getChildren().add(startButton);
-        }
-
-        centerButtons.getChildren().add(autoPlaceButton);
-
-        // Правая группа кнопок (только для сетевой игры)
-        VBox rightButtons = null;
-        if (gameMode.equals("host") || gameMode.equals("client")) {
-            rightButtons = new VBox(10);
-            rightButtons.setAlignment(Pos.CENTER);
-
-            Button chatButton = createStyledButton("💬  Открыть чат", FXDesignHelper.Colors.SUCCESS);
-            chatButton.setOnAction(e -> openGameChat());
-
-            rightButtons.getChildren().add(chatButton);
-
-            // Кнопка сервера для хоста
-            if (gameMode.equals("host")) {
-                Button serverButton = createStyledButton("🌐  Запустить сервер", FXDesignHelper.Colors.BUTTON_BG);
-                serverButton.setOnAction(e -> hostGame());
-                rightButtons.getChildren().add(serverButton);
-            }
-
-            // Кнопка подключения для клиента
-            if (gameMode.equals("client")) {
-                Button connectButton = createStyledButton("🔗  Подключиться", FXDesignHelper.Colors.BUTTON_BG);
-                connectButton.setOnAction(e -> showConnectDialog());
-                rightButtons.getChildren().add(connectButton);
-            }
-        }
-
-        // Добавляем группы кнопок на панель
-        bottomPanel.getChildren().add(leftButtons);
-        bottomPanel.getChildren().add(centerButtons);
-        if (rightButtons != null) {
-            bottomPanel.getChildren().add(rightButtons);
-        }
-
-        return bottomPanel;
-    }
-
-    // Создание стилизованной кнопки
-    private Button createStyledButton(String text, Color color) {
-        Button button = new Button(text);
-        button.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
-        button.setPrefSize(200, 40);
-
-        // Градиент для кнопки
-        LinearGradient gradient = new LinearGradient(
-                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
-                new Stop(0, color),
-                new Stop(1, color.darker())
-        );
-
-        button.setBackground(new Background(new BackgroundFill(
-                gradient,
-                new CornerRadii(6),
-                null
-        )));
-
-        button.setTextFill(FXDesignHelper.Colors.TEXT_WHITE);
-        button.setBorder(new Border(new BorderStroke(
-                color.darker(),
-                BorderStrokeStyle.SOLID,
-                new CornerRadii(6),
-                new BorderWidths(2)
-        )));
-
-        // Эффекты при наведении
-        button.setOnMouseEntered(e -> {
-            button.setBackground(new Background(new BackgroundFill(
-                    color.brighter(),
-                    new CornerRadii(6),
-                    null
-            )));
-            button.setTranslateY(-2);
-        });
-
-        button.setOnMouseExited(e -> {
-            button.setBackground(new Background(new BackgroundFill(
-                    gradient,
-                    new CornerRadii(6),
-                    null
-            )));
-            button.setTranslateY(0);
-        });
-
-        return button;
-    }
-
-    // Инициализация для режима
-    private void initializeForMode() {
         Platform.runLater(() -> {
             switch (gameMode) {
                 case "host":
-                    playerLabel.setText("Хост");
-                    turnIndicator.setText("⚓  Запустите сервер");
-                    turnIndicator.setTextFill(FXDesignHelper.Colors.WARNING);
-                    setStatus("Нажмите 'Запустить сервер' для создания игры", FXDesignHelper.Colors.TEXT_GOLD);
-
-                    // Автоматически запускаем сервер с задержкой
+                    playerLabel.setText("Создание игры (Хост)");
+                    statusLabel.setText("Нажмите 'Запустить сервер'");
+                    showInfo("Вы создаете игру. Другой игрок должен подключиться к вашему IP.");
+                    // Автоматически запускаем сервер
                     new Thread(() -> {
                         try {
-                            Thread.sleep(2000);
+                            Thread.sleep(500); // Небольшая задержка для инициализации UI
                             Platform.runLater(() -> hostGame());
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
@@ -616,12 +104,54 @@ public class GameController extends BorderPane {
                     break;
 
                 case "client":
-                    playerLabel.setText("Клиент");
-                    turnIndicator.setText("⚓  Подключитесь к серверу");
-                    turnIndicator.setTextFill(FXDesignHelper.Colors.WARNING);
-                    setStatus("Введите IP-адрес сервера для подключения", FXDesignHelper.Colors.TEXT_GOLD);
+                    playerLabel.setText("Подключение к игре");
+                    statusLabel.setText("Введите IP-адрес сервера");
+                    showInfo("Подключитесь к игре, введя IP-адрес хоста.");
+                    // Автоматически показываем диалог подключения
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(500); // Небольшая задержка для инициализации UI
+                            Platform.runLater(() -> showConnectDialog());
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+                    break;
 
-                    // Автоматически показываем диалог подключения с задержкой
+                case "single":
+                default:
+                    playerLabel.setText("Одиночная игра");
+                    statusLabel.setText("Расставьте корабли");
+                    break;
+            }
+        });
+    }
+
+    private void initializeForMode() {
+        Platform.runLater(() -> {
+            switch (gameMode) {
+                case "host":
+                    playerLabel.setText("Создание игры (Хост)");
+                    statusLabel.setText("Запуск сервера...");
+                    showInfo("Вы создаете игру. Сообщите свой IP другому игроку.");
+
+                    // Запускаем сервер в фоновом режиме
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(2000); // Даем время на инициализацию UI
+                            Platform.runLater(() -> hostGame());
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+                    break;
+
+                case "client":
+                    playerLabel.setText("Подключение к игре");
+                    statusLabel.setText("Введите IP-адрес сервера");
+                    showInfo("Подключитесь к игре, введя IP-адрес хоста.");
+
+                    // Показываем диалог с задержкой
                     new Thread(() -> {
                         try {
                             Thread.sleep(1000);
@@ -631,502 +161,13 @@ public class GameController extends BorderPane {
                         }
                     }).start();
                     break;
-
-                case "single":
-                    playerLabel.setText("Игрок");
-                    turnIndicator.setText("⚓  Расставьте корабли");
-                    turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-                    setStatus("Нажмите 'Авторасстановка' или кликните по своему полю", FXDesignHelper.Colors.TEXT_GOLD);
-                    break;
             }
         });
     }
 
-    // Инициализация чата
-    private void initializeChat() {
-        if (chatInitialized) return;
-
-        chatArea.appendText("=== ИГРОВОЙ ЧАТ ===\n");
-        chatArea.appendText("Добро пожаловать в игру!\n");
-        chatArea.appendText("========================\n\n");
-
-        if (gameMode.equals("host")) {
-            chatArea.appendText("[Система] Вы создали игру как хост\n");
-            chatArea.appendText("[Система] Ожидайте подключения других игроков\n");
-        } else if (gameMode.equals("client")) {
-            chatArea.appendText("[Система] Вы подключились как клиент\n");
-            chatArea.appendText("[Система] Ожидайте начала игры\n");
-        }
-
-        chatInitialized = true;
-    }
-
-    // Отправка сообщения в чат
-    private void sendChatMessage() {
-        String message = chatInput.getText().trim();
-        if (!message.isEmpty()) {
-            String username = connectionType.equals("host") ? "Хост" : "Клиент";
-            chatArea.appendText("Вы (" + username + "): " + message + "\n");
-            chatInput.clear();
-
-            // Симуляция ответа для демонстрации
-            if (gameMode.equals("host")) {
-                simulateOpponentResponse();
-            }
-        }
-    }
-
-    // Симуляция ответа противника в чате (для демонстрации)
-    private void simulateOpponentResponse() {
-        String[] responses = {
-                "Отличный ход!",
-                "Интересная стратегия...",
-                "Мне нравится эта игра!",
-                "Попробуйте атаковать другой сектор",
-                "У меня осталось несколько кораблей",
-                "Эта битва становится жаркой!",
-                "Хорошая попытка, но промах!",
-                "Мои корабли держатся стойко!"
-        };
-
-        int randomIndex = (int) (Math.random() * responses.length);
-        String response = responses[randomIndex];
-
-        // Задержка перед ответом (1-3 секунды)
-        new Thread(() -> {
-            try {
-                Thread.sleep(1000 + (int)(Math.random() * 2000));
-                Platform.runLater(() -> {
-                    chatArea.appendText("Противник: " + response + "\n");
-                });
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }).start();
-    }
-
-    // Открытие чата
-    private void openGameChat() {
-        if (chatPanel != null && chatInput != null) {
-            chatInput.requestFocus();
-            setStatus("Чат активен. Введите сообщение и нажмите Enter", FXDesignHelper.Colors.TEXT_GOLD);
-        }
-    }
-
-    // Автоматическая расстановка кораблей
-    private void placeAllShipsAutomatically() {
-        System.out.println("Начинаем автоматическую расстановку кораблей...");
-
-        // Сбрасываем игрока
-        player = new Player("Вы");
-
-        // Создаем список кораблей
-        List<Ship> shipsToPlace = new ArrayList<>(player.getShips());
-
-        // Сортируем корабли по размеру (от большего к меньшему)
-        shipsToPlace.sort((s1, s2) -> Integer.compare(s2.getSize(), s1.getSize()));
-
-        System.out.println("Кораблей для расстановки: " + shipsToPlace.size());
-
-        for (Ship ship : shipsToPlace) {
-            boolean placed = false;
-            int attempts = 0;
-            int maxAttempts = 200;
-
-            while (!placed && attempts < maxAttempts) {
-                int x = (int) (Math.random() * 10);
-                int y = (int) (Math.random() * 10);
-                ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
-
-                if (canPlaceShipWithMargin(ship, x, y, direction)) {
-                    if (player.placeShip(ship, x, y, direction)) {
-                        placed = true;
-                        System.out.println("✓ Корабль размером " + ship.getSize() + " размещен");
-                    }
-                }
-                attempts++;
-            }
-
-            if (!placed) {
-                // Попробуем без свободного пространства
-                placed = tryPlaceShipWithoutMargin(ship);
-
-                if (!placed) {
-                    setStatus("Ошибка расстановки кораблей!", FXDesignHelper.Colors.ERROR);
-                    resetAndTryAgain();
-                    return;
-                }
-            }
-        }
-
-        updatePlayerGrid();
-        updateShipCounters();
-        setStatus("✅ Все корабли расставлены автоматически!", FXDesignHelper.Colors.SUCCESS);
-
-        // Обновляем состояние кнопки "Готов"
-        updateReadyButtonState();
-    }
-
-    private boolean canPlaceShipWithMargin(Ship ship, int x, int y, ShipDirection direction) {
-        int size = ship.getSize();
-        GameBoard board = player.getBoard();
-
-        if (direction == ShipDirection.HORIZONTAL) {
-            if (x + size > 10) return false;
-
-            for (int i = -1; i <= size; i++) {
-                for (int j = -1; j <= 1; j++) {
-                    int checkX = x + i;
-                    int checkY = y + j;
-
-                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
-                        if (j == 0 && i >= 0 && i < size) {
-                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
-                                return false;
-                            }
-                        } else {
-                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-
-        } else {
-            if (y + size > 10) return false;
-
-            for (int i = -1; i <= 1; i++) {
-                for (int j = -1; j <= size; j++) {
-                    int checkX = x + i;
-                    int checkY = y + j;
-
-                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
-                        if (i == 0 && j >= 0 && j < size) {
-                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
-                                return false;
-                            }
-                        } else {
-                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private boolean tryPlaceShipWithoutMargin(Ship ship) {
-        boolean placed = false;
-        int attempts = 0;
-
-        while (!placed && attempts < 100) {
-            int x = (int) (Math.random() * 10);
-            int y = (int) (Math.random() * 10);
-            ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
-
-            if (player.placeShip(ship, x, y, direction)) {
-                placed = true;
-            }
-            attempts++;
-        }
-
-        return placed;
-    }
-
-    private void resetAndTryAgain() {
-        System.out.println("Пробуем расставить корабли заново...");
-        player = new Player("Вы");
-        placeAllShipsAutomatically();
-    }
-
-    // Обновление игрового поля игрока
-    private void updatePlayerGrid() {
-        if (playerGrid == null || player == null) return;
-
-        for (int y = 0; y < 10; y++) {
-            for (int x = 0; x < 10; x++) {
-                Rectangle cell = (Rectangle) getNodeFromGridPane(playerGrid, x + 1, y + 1);
-                if (cell != null) {
-                    GameBoard.CellState state = player.getBoard().getCell(x, y);
-                    updateCellColor(cell, state);
-                }
-            }
-        }
-    }
-
-    // Обновление цвета клетки
-    private void updateCellColor(Rectangle cell, GameBoard.CellState state) {
-        switch (state) {
-            case EMPTY:
-                cell.setFill(emptyColor);
-                break;
-            case SHIP:
-                cell.setFill(shipColor);
-                break;
-            case HIT:
-                cell.setFill(hitColor);
-                break;
-            case MISS:
-                cell.setFill(missColor);
-                break;
-            case SUNK:
-                cell.setFill(sunkColor);
-                break;
-        }
-    }
-
-    // Обновление счетчиков кораблей
-    private void updateShipCounters() {
-        Platform.runLater(() -> {
-            if (playerShipsLabel == null || enemyShipsLabel == null) {
-                // Метки еще не инициализированы, откладываем обновление
-                return;
-            }
-
-            if (player != null) {
-                int playerShips = (int) player.getShips().stream()
-                        .filter(ship -> !ship.isSunk())
-                        .count();
-                playerShipsLabel.setText("Ваши корабли: " + playerShips + "/10");
-            }
-
-            if (enemy != null) {
-                int enemyShips = (int) enemy.getShips().stream()
-                        .filter(ship -> !ship.isSunk())
-                        .count();
-                enemyShipsLabel.setText("Корабли противника: " + enemyShips + "/10");
-            }
-        });
-    }
-
-    // Обновление состояния кнопки "Готов"
-    private void updateReadyButtonState() {
-        Platform.runLater(() -> {
-            Button readyButton = (Button) lookup("#readyButton");
-            if (readyButton != null) {
-                if (iAmReady) {
-                    readyButton.setText("✓  Готов");
-                    readyButton.setDisable(true);
-                } else if (player.allShipsPlaced()) {
-                    readyButton.setText("✅  Готов к игре");
-                    readyButton.setDisable(false);
-                } else {
-                    readyButton.setText("Расставьте корабли");
-                    readyButton.setDisable(true);
-                }
-            }
-        });
-    }
-
-    // Атака противника
-    private void attackEnemy(int x, int y) {
-        if (!isMyTurn || !gameStarted) {
-            setStatus("Сейчас не ваш ход!", FXDesignHelper.Colors.ERROR);
-            return;
-        }
-
-        Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x + 1, y + 1);
-        if (cell != null) {
-            Color fill = (Color) cell.getFill();
-            if (fill.equals(hitColor) || fill.equals(missColor)) {
-                setStatus("Вы уже стреляли в эту клетку!", FXDesignHelper.Colors.ERROR);
-                return;
-            }
-        }
-
-        // Симуляция атаки для демонстрации
-        boolean isHit = Math.random() > 0.6;
-
-        if (isHit) {
-            cell.setFill(hitColor);
-            enemyHits++;
-            setStatus("✅ Попадание! Стреляйте снова", FXDesignHelper.Colors.SUCCESS);
-
-            // Проверка победы
-            if (enemyHits >= totalEnemyCells) {
-                handleVictory();
-                return;
-            }
-        } else {
-            cell.setFill(missColor);
-            setStatus("Промах! Ход противника", FXDesignHelper.Colors.WARNING);
-
-            // Ход переходит противнику
-            isMyTurn = false;
-            turnIndicator.setText("⏳  Ход противника");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.WARNING);
-
-            // В одиночной игре - ход компьютера
-            if (gameMode.equals("single")) {
-                computerTurn();
-            }
-        }
-
-        updateShipCounters();
-    }
-
-    // Ход компьютера (для одиночной игры)
-    private void computerTurn() {
-        new Thread(() -> {
-            try {
-                Thread.sleep(1500); // Пауза перед ходом компьютера
-
-                Platform.runLater(() -> {
-                    // Случайная атака компьютера
-                    int x, y;
-                    Rectangle cell;
-                    do {
-                        x = (int) (Math.random() * 10);
-                        y = (int) (Math.random() * 10);
-                        cell = (Rectangle) getNodeFromGridPane(playerGrid, x + 1, y + 1);
-                    } while (cell == null || !isEmptyCell(cell));
-
-                    // Симуляция попадания
-                    boolean isHit = Math.random() > 0.7;
-
-                    if (isHit) {
-                        cell.setFill(hitColor);
-                        setStatus("Противник попал по вашему кораблю!", FXDesignHelper.Colors.ERROR);
-                    } else {
-                        cell.setFill(missColor);
-                        setStatus("Противник промахнулся", FXDesignHelper.Colors.TEXT_GOLD);
-                    }
-
-                    // Проверка поражения
-                    if (player.allShipsSunk()) {
-                        handleDefeat();
-                        return;
-                    }
-
-                    // Возвращаем ход игроку
-                    isMyTurn = true;
-                    turnIndicator.setText("🎯  Ваш ход");
-                    turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-
-                    updateShipCounters();
-                });
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }).start();
-    }
-
-    // Обработка победы
-    private void handleVictory() {
-        gameStarted = false;
-        isMyTurn = false;
-
-        Platform.runLater(() -> {
-            turnIndicator.setText("🏆  ВЫ ПОБЕДИЛИ!");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-            setStatus("Все корабли противника потоплены!", FXDesignHelper.Colors.SUCCESS);
-
-            showAlert("ПОБЕДА!", "Поздравляем! Вы выиграли игру!");
-
-            if (chatArea != null) {
-                chatArea.appendText("[Система] Вы победили! Поздравляем!\n");
-            }
-        });
-    }
-
-    // Обработка поражения
-    private void handleDefeat() {
-        gameStarted = false;
-        isMyTurn = false;
-
-        Platform.runLater(() -> {
-            turnIndicator.setText("💀  ВЫ ПРОИГРАЛИ");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.ERROR);
-            setStatus("Все ваши корабли потоплены", FXDesignHelper.Colors.ERROR);
-
-            showAlert("ПОРАЖЕНИЕ", "Все ваши корабли потоплены. Попробуйте еще раз!");
-
-            if (chatArea != null) {
-                chatArea.appendText("[Система] Вы проиграли. Попробуйте еще раз!\n");
-            }
-        });
-    }
-
-    // Начало одиночной игры
-    private void startSinglePlayerGame() {
-        if (!player.allShipsPlaced()) {
-            setStatus("Сначала расставьте все корабли!", FXDesignHelper.Colors.ERROR);
-            return;
-        }
-
-        gameStarted = true;
-        isMyTurn = true;
-
-        Platform.runLater(() -> {
-            turnIndicator.setText("🎯  Ваш ход");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-            setStatus("Игра началась! Атакуйте поле противника", FXDesignHelper.Colors.TEXT_GOLD);
-        });
-    }
-
-    // Отправка сигнала готовности
-    private void sendReadySignal() {
-        if (!player.allShipsPlaced()) {
-            setStatus("Сначала расставьте все корабли!", FXDesignHelper.Colors.ERROR);
-            return;
-        }
-
-        iAmReady = true;
-
-        Platform.runLater(() -> {
-            turnIndicator.setText("✅  Вы готовы");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-            setStatus("Ожидаем готовности противника...", FXDesignHelper.Colors.TEXT_GOLD);
-
-            if (chatArea != null) {
-                chatArea.appendText("[Система] Вы готовы к игре. Ожидание противника...\n");
-            }
-
-            // Обновляем кнопку
-            updateReadyButtonState();
-        });
-    }
-
-    // Запуск сервера (хост)
-    private void hostGame() {
-        try {
-            setStatus("Запуск сервера...", FXDesignHelper.Colors.WARNING);
-
-            // Симуляция запуска сервера
-            new Thread(() -> {
-                try {
-                    Thread.sleep(2000); // Имитация задержки
-
-                    Platform.runLater(() -> {
-                        turnIndicator.setText("🌐  Сервер запущен");
-                        turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-                        setStatus("Сервер запущен на порту 5555. Ожидание подключения...", FXDesignHelper.Colors.TEXT_GOLD);
-
-                        if (chatArea != null) {
-                            chatArea.appendText("[Система] Сервер запущен. Ожидание подключения...\n");
-                            chatArea.appendText("[Система] Сообщите свой IP другим игрокам\n");
-                        }
-                    });
-
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }).start();
-
-        } catch (Exception e) {
-            setStatus("Ошибка запуска сервера: " + e.getMessage(), FXDesignHelper.Colors.ERROR);
-        }
-    }
-
-    // Показать диалог подключения
     private void showConnectDialog() {
         if (connectionDialogShown) {
-            return; // Не показывать повторно
+            return; // Не показываем диалог повторно
         }
 
         connectionDialogShown = true;
@@ -1140,93 +181,886 @@ public class GameController extends BorderPane {
         Optional<String> result = dialog.showAndWait();
         if (result.isPresent() && !result.get().trim().isEmpty()) {
             String serverAddress = result.get().trim();
+            System.out.println("Подключение к серверу: " + serverAddress);
             connectToGame(serverAddress);
         } else {
-            setStatus("Подключение отменено", FXDesignHelper.Colors.ERROR);
-            connectionDialogShown = false; // Сбрасываем флаг, чтобы можно было открыть снова
-        }
-    }
-
-    // Подключение к игре (клиент)
-    private void connectToGame(String serverAddress) {
-        try {
-            setStatus("Подключение к " + serverAddress + "...", FXDesignHelper.Colors.WARNING);
-
-            // Симуляция подключения
+            // Если пользователь отменил, возвращаемся в меню
+            showInfo("Подключение отменено. Возвращаемся в меню...");
             new Thread(() -> {
                 try {
-                    Thread.sleep(1500); // Имитация задержки
-
-                    Platform.runLater(() -> {
-                        turnIndicator.setText("🔗  Подключено");
-                        turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-                        setStatus("Успешно подключено к серверу! Расставьте корабли", FXDesignHelper.Colors.TEXT_GOLD);
-
-                        if (chatArea != null) {
-                            chatArea.appendText("[Система] Подключено к серверу: " + serverAddress + "\n");
-                            chatArea.appendText("[Система] Теперь можно общаться в чате\n");
-                            chatArea.appendText("[Система] Расставьте корабли и нажмите 'Готов'\n");
-                        }
-                    });
-
+                    Thread.sleep(1500);
+                    Platform.runLater(() -> goBack());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
             }).start();
-
-        } catch (Exception e) {
-            setStatus("Ошибка подключения: " + e.getMessage(), FXDesignHelper.Colors.ERROR);
-            connectionDialogShown = false; // При ошибке сбрасываем флаг
         }
     }
 
-    // Перезапуск игры
-    private void restartGame() {
-        System.out.println("Перезапуск игры...");
-
-        // Сбрасываем игроков
-        player = new Player("Вы");
+    private void initializeGame() {
+        player = new Player("Игрок 1");
         enemy = new Player("Противник");
-
-        // Сбрасываем состояние
         isMyTurn = false;
         gameStarted = false;
-        iAmReady = false;
-        opponentReady = false;
-        enemyHits = 0;
-        connectionDialogShown = false; // Сбрасываем флаг диалога
+    }
 
-        // Перерасставляем корабли
-        placeAllShipsAutomatically();
+    private HBox createTopPanel() {
+        HBox topPanel = new HBox(20);
+        topPanel.setAlignment(Pos.CENTER);
+        topPanel.setPadding(new Insets(15));
+        topPanel.setStyle("-fx-background-color: #2C3E50;");
 
-        // Очищаем чат (если есть)
-        if (chatArea != null) {
-            chatArea.clear();
-            chatInitialized = false;
-            initializeChat();
+        playerLabel = new Label("Игрок 1");
+        playerLabel.setFont(Font.font("Arial", 20));
+        playerLabel.setTextFill(Color.WHITE);
+
+        statusLabel = new Label("Расставьте корабли");
+        statusLabel.setFont(Font.font("Arial", 16));
+        statusLabel.setTextFill(Color.LIGHTGREEN);
+
+        topPanel.getChildren().addAll(playerLabel, statusLabel);
+        return topPanel;
+    }
+
+    private HBox createGameArea() {
+        HBox gameArea = new HBox(30);
+        gameArea.setAlignment(Pos.CENTER);
+        gameArea.setPadding(new Insets(20));
+
+        VBox playerField = createPlayerField();
+        VBox enemyField = createEnemyField();
+
+        // Создаем панель чата для сетевой игры
+        if (gameMode.equals("host") || gameMode.equals("client")) {
+            chatPanel = createChatPanel();
+            gameArea.getChildren().addAll(playerField, enemyField, chatPanel);
+        } else {
+            // Для одиночной игры чат не нужен
+            gameArea.getChildren().addAll(playerField, enemyField);
         }
 
-        Platform.runLater(() -> {
-            turnIndicator.setText("⚓  Расставьте корабли");
-            turnIndicator.setTextFill(FXDesignHelper.Colors.SUCCESS);
-            setStatus("Игра перезапущена", FXDesignHelper.Colors.TEXT_GOLD);
+        return gameArea;
+    }
 
-            // Обновляем кнопку "Готов"
+    private VBox createChatPanel() {
+        VBox chatPanel = new VBox(5);
+        chatPanel.setPrefWidth(300);
+        chatPanel.setStyle("-fx-background-color: rgba(30, 34, 42, 0.95); -fx-padding: 10; -fx-border-color: #4CAF50; -fx-border-width: 2; -fx-border-radius: 5;");
+
+        // Заголовок чата
+        HBox titleBox = new HBox();
+        titleBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label chatTitle = new Label("💬 Игровой чат");
+        chatTitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #4CAF50; -fx-font-weight: bold;");
+
+        titleBox.getChildren().add(chatTitle);
+
+        // Область сообщений
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+        chatArea.setWrapText(true);
+        chatArea.setPrefHeight(400);
+        chatArea.setStyle("-fx-control-inner-background: #2C3E50; -fx-text-fill: #ECF0F1; -fx-font-family: 'Consolas'; -fx-font-size: 12px;");
+
+        // Панель ввода
+        HBox inputBox = new HBox(5);
+        inputBox.setPadding(new Insets(5, 0, 0, 0));
+
+        chatInput = new TextField();
+        chatInput.setPromptText("Введите сообщение...");
+        chatInput.setPrefWidth(200);
+        chatInput.setStyle("-fx-background-color: #34495E; -fx-text-fill: white; -fx-prompt-text-fill: #95A5A6; -fx-border-color: #4CAF50; -fx-border-width: 1;");
+
+        // Обработка нажатия Enter
+        chatInput.setOnAction(e -> sendChatMessage());
+
+        chatSendButton = new Button("➤");
+        chatSendButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-min-width: 40;");
+        chatSendButton.setOnAction(e -> sendChatMessage());
+
+        inputBox.getChildren().addAll(chatInput, chatSendButton);
+
+        chatPanel.getChildren().addAll(titleBox, chatArea, inputBox);
+
+        // Инициализируем чат
+        initializeChat();
+
+        return chatPanel;
+    }
+
+    private void initializeChat() {
+        if (chatInitialized) return;
+
+        chatArea.appendText("=== ИГРОВОЙ ЧАТ ===\n");
+        chatArea.appendText("Автоматически подключен\n");
+        chatArea.appendText("Общайтесь с противником\n");
+        chatArea.appendText("===================\n\n");
+
+        chatInitialized = true;
+    }
+
+    private String getUsername() {
+        if (connectionType != null) {
+            if (connectionType.equals("host")) {
+                return "Хост";
+            } else if (connectionType.equals("client")) {
+                return "Клиент";
+            }
+        }
+        return "Игрок";
+    }
+
+    private void sendChatMessage() {
+        String message = chatInput.getText().trim();
+        if (!message.isEmpty()) {
+            String username = getUsername();
+
+            // Временное решение: хост сразу показывает свое сообщение
+            if (gameServer != null && gameServer.isRunning()) {
+                // Хост - сразу добавляем в чат
+                chatArea.appendText("Вы (" + username + "): " + message + "\n");
+
+                // И отправляем
+                gameServer.sendMessage("CHATMSG:" + username + ":" + message);
+                chatInput.clear();
+            }
+            else if (gameClient != null && gameClient.isConnected()) {
+                // Клиент - только отправляем
+                gameClient.sendMessage("CHATMSG:" + username + ":" + message);
+                chatInput.clear();
+            }
+        }
+    }
+
+    private void handleChatMessage(String sender, String message) {
+        Platform.runLater(() -> {
+            System.out.println("Добавляем в чат: " + sender + ": " + message);
+            chatArea.appendText(sender + ": " + message + "\n");
+        });
+    }
+
+    private VBox createPlayerField() {
+        VBox fieldBox = new VBox(10);
+        fieldBox.setAlignment(Pos.CENTER);
+
+        Label titleLabel = new Label("Ваше поле");
+        titleLabel.setFont(Font.font("Arial", 18));
+        titleLabel.setTextFill(Color.WHITE);
+
+        playerGrid = new GridPane();
+        playerGrid.setHgap(2);
+        playerGrid.setVgap(2);
+
+        for (int row = 0; row < 10; row++) {
+            for (int col = 0; col < 10; col++) {
+                Rectangle cell = new Rectangle(35, 35);
+                cell.setFill(Color.LIGHTBLUE);
+                cell.setStroke(Color.DARKBLUE);
+
+                final int x = col;
+                final int y = row;
+
+                // Для расстановки кораблей
+                cell.setOnMouseClicked(e -> {
+                    if (!gameStarted && player != null) {
+                        placeAllShipsAutomatically();
+                        updatePlayerGrid();
+
+                        if (player.allShipsPlaced()) {
+                            statusLabel.setText("Все корабли расставлены. Ожидаем противника...");
+                            sendReadySignal();
+                        }
+                    }
+                });
+
+                playerGrid.add(cell, col, row);
+            }
+        }
+
+        fieldBox.getChildren().addAll(titleLabel, playerGrid);
+        return fieldBox;
+    }
+
+    private VBox createEnemyField() {
+        VBox fieldBox = new VBox(10);
+        fieldBox.setAlignment(Pos.CENTER);
+
+        Label titleLabel = new Label("Поле противника");
+        titleLabel.setFont(Font.font("Arial", 18));
+        titleLabel.setTextFill(Color.WHITE);
+
+        enemyGrid = new GridPane();
+        enemyGrid.setHgap(2);
+        enemyGrid.setVgap(2);
+
+        for (int row = 0; row < 10; row++) {
+            for (int col = 0; col < 10; col++) {
+                Rectangle cell = new Rectangle(35, 35);
+                cell.setFill(Color.LIGHTBLUE);
+                cell.setStroke(Color.DARKBLUE);
+
+                final int x = col;
+                final int y = row;
+
+                cell.setOnMouseClicked(e -> {
+                    if (gameStarted && isMyTurn) {
+                        attackEnemy(x, y);
+                    }
+                });
+
+                enemyGrid.add(cell, col, row);
+            }
+        }
+
+        fieldBox.getChildren().addAll(titleLabel, enemyGrid);
+        return fieldBox;
+    }
+
+    private HBox createBottomPanel() {
+        HBox bottomPanel = new HBox(15);
+        bottomPanel.setAlignment(Pos.CENTER);
+        bottomPanel.setPadding(new Insets(15));
+
+        Button backButton = new Button("В главное меню");
+        backButton.setOnAction(e -> goBack());
+
+        Button restartButton = new Button("Новая игра");
+        restartButton.setOnAction(e -> restartGame());
+
+        Button autoPlaceButton = new Button("Авторасстановка");
+        autoPlaceButton.setOnAction(e -> {
+            placeAllShipsAutomatically();
+            updatePlayerGrid();
+            showInfo("Корабли расставлены автоматически");
             updateReadyButtonState();
         });
 
-        System.out.println("Игра перезапущена");
+        // Кнопка "Готов"
+        Button readyButton = new Button("Готов к игре");
+        readyButton.setId("readyButton");
+        readyButton.setOnAction(e -> {
+            if (player.allShipsPlaced()) {
+                sendReadySignal();
+                updateReadyButtonState();
+            } else {
+                showInfo("Сначала расставьте все корабли!");
+            }
+        });
+
+        VBox leftBox = new VBox(5, backButton, restartButton);
+        VBox centerBox = new VBox(5, autoPlaceButton, readyButton);
+
+        bottomPanel.getChildren().addAll(leftBox, centerBox);
+
+        // Кнопка чата (только для сетевой игры)
+        if (gameMode.equals("host") || gameMode.equals("client")) {
+            Button chatButton = new Button("💬 Чат");
+            chatButton.setId("chatButton");
+            chatButton.setOnAction(e -> openGameChat());
+            chatButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+
+            VBox rightBox = new VBox(5, chatButton);
+            bottomPanel.getChildren().add(rightBox);
+        }
+
+        bottomPanel.setSpacing(30);
+        return bottomPanel;
     }
 
-    // Возврат в главное меню
-    private void goBack() {
-        HelloApplication app = HelloApplication.getInstance();
-        if (app != null && app.getNavigator() != null) {
-            app.getNavigator().navigateBack();
+    private void updateReadyButtonState() {
+        Platform.runLater(() -> {
+            // Находим кнопку "Готов" в интерфейсе
+            Button readyButton = (Button) lookup("#readyButton");
+            if (readyButton != null) {
+                if (iAmReady) {
+                    readyButton.setText("✓ Готов");
+                    readyButton.setStyle("-fx-background-color: #27AE60; -fx-text-fill: white;");
+                    readyButton.setDisable(true);
+                } else if (player.allShipsPlaced()) {
+                    readyButton.setText("Готов к игре");
+                    readyButton.setStyle("-fx-background-color: #2E8B57; -fx-text-fill: white;");
+                    readyButton.setDisable(false);
+                } else {
+                    readyButton.setText("Расставьте корабли");
+                    readyButton.setStyle("-fx-background-color: #7F8C8D; -fx-text-fill: white;");
+                    readyButton.setDisable(true);
+                }
+            }
+        });
+    }
+
+    private void updatePlayerGrid() {
+        if (playerGrid == null || player == null) return;
+
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                Rectangle cell = (Rectangle) getNodeFromGridPane(playerGrid, x, y);
+                if (cell != null) {
+                    GameBoard.CellState state = player.getBoard().getCell(x, y);
+                    switch (state) {
+                        case EMPTY:
+                            cell.setFill(Color.LIGHTBLUE);
+                            break;
+                        case SHIP:
+                            cell.setFill(Color.DARKGRAY);
+                            break;
+                        case HIT:
+                            cell.setFill(Color.RED);
+                            break;
+                        case MISS:
+                            cell.setFill(Color.WHITE);
+                            break;
+                        case SUNK:
+                            cell.setFill(Color.DARKRED);
+                            break;
+                    }
+                }
+            }
         }
     }
 
-    // Вспомогательные методы
+    private void updateEnemyGrid() {
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
+                if (cell != null) {
+                    // Показываем только результаты выстрелов
+                    // Не показываем расположение кораблей противника
+                    cell.setFill(Color.LIGHTBLUE);
+                }
+            }
+        }
+    }
+
+    private void attackEnemy(int x, int y) {
+        if (!isMyTurn || !gameStarted) {
+            showInfo("Сейчас не ваш ход!");
+            return;
+        }
+
+        // Проверяем, не стреляли ли уже в эту клетку
+        Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
+        if (cell != null) {
+            Color fill = (Color) cell.getFill();
+            if (fill.equals(Color.RED) || fill.equals(Color.WHITE)) {
+                showInfo("Вы уже стреляли в эту клетку!");
+                return;
+            }
+        }
+
+        // Отправляем ход противнику
+        String message = "ATTACK:" + x + "," + y;
+        boolean sent = false;
+
+        if (gameClient != null && gameClient.isConnected()) {
+            gameClient.sendMessage(message);
+            sent = true;
+        } else if (gameServer != null && gameServer.isRunning()) {
+            gameServer.sendMessage(message);
+            sent = true;
+        }
+
+        if (sent) {
+            // Временно помечаем клетку
+            if (cell != null) {
+                cell.setFill(Color.ORANGE);
+            }
+
+            isMyTurn = false;
+            statusLabel.setText("Ожидаем результат выстрела...");
+            statusLabel.setTextFill(Color.YELLOW);
+            setEnemyFieldEnabled(false);
+        } else {
+            showError("Не удалось отправить ход. Проверьте соединение.");
+        }
+    }
+
+    private boolean checkConnection() {
+        if (gameMode.equals("host")) {
+            return gameServer != null && gameServer.isRunning();
+        } else if (gameMode.equals("client")) {
+            return gameClient != null && gameClient.isConnected();
+        }
+        return false;
+    }
+
+    private void sendReadySignal() {
+        System.out.println("=== ОТПРАВКА СИГНАЛА ГОТОВНОСТИ ===");
+        System.out.println("Режим игры: " + gameMode);
+        System.out.println("Соединение type: " + connectionType);
+        System.out.println("Все корабли расставлены: " + player.allShipsPlaced());
+        System.out.println("Уже готов: " + iAmReady);
+
+        // Показываем состояние соединения
+        if (gameMode.equals("host")) {
+            System.out.println("Сервер: " + (gameServer != null ? "существует" : "null"));
+            System.out.println("Сервер работает: " + (gameServer != null && gameServer.isRunning()));
+        } else if (gameMode.equals("client")) {
+            System.out.println("Клиент: " + (gameClient != null ? "существует" : "null"));
+            System.out.println("Клиент подключен: " + (gameClient != null && gameClient.isConnected()));
+        }
+
+        // Проверяем расстановку кораблей
+        if (!player.allShipsPlaced()) {
+            showInfo("Сначала расставьте все корабли!");
+            System.out.println("ОШИБКА: Не все корабли расставлены");
+            return;
+        }
+
+        // Проверяем, не готовы ли уже
+        if (iAmReady) {
+            showInfo("Вы уже готовы к игре!");
+            System.out.println("ОШИБКА: Уже готов");
+            return;
+        }
+
+        // Проверяем соединение ОТДЕЛЬНО для каждого режима
+        if (gameMode.equals("host")) {
+            if (gameServer == null) {
+                showError("Сервер не создан! Нажмите 'Запустить сервер'");
+                System.out.println("ОШИБКА: Сервер не создан");
+                return;
+            }
+
+            if (!gameServer.isRunning()) {
+                showError("Сервер не запущен! Нажмите 'Запустить сервер'");
+                System.out.println("ОШИБКА: Сервер не запущен");
+                return;
+            }
+
+        } else if (gameMode.equals("client")) {
+            if (gameClient == null) {
+                showError("Клиент не создан! Нажмите 'Подключиться'");
+                System.out.println("ОШИБКА: Клиент не создан");
+                return;
+            }
+
+            if (!gameClient.isConnected()) {
+                showError("Нет подключения к серверу! Нажмите 'Подключиться'");
+                System.out.println("ОШИБКА: Клиент не подключен");
+                return;
+            }
+        } else {
+            showError("Неизвестный режим игры: " + gameMode);
+            return;
+        }
+
+        iAmReady = true;
+        System.out.println("Устанавливаем iAmReady = true");
+
+        String message = "READY:" + connectionType;
+        System.out.println("Отправляем сообщение: " + message);
+
+        boolean sent = false;
+
+        try {
+            if (gameClient != null && gameClient.isConnected()) {
+                gameClient.sendMessage(message);
+                sent = true;
+                System.out.println("Сообщение отправлено через клиент");
+            } else if (gameServer != null && gameServer.isRunning()) {
+                gameServer.sendMessage(message);
+                sent = true;
+                System.out.println("Сообщение отправлено через сервер");
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка отправки: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        if (sent) {
+            System.out.println("Сообщение успешно отправлено");
+
+            Platform.runLater(() -> {
+                statusLabel.setText("✓ Вы готовы. Ожидаем противника...");
+                statusLabel.setTextFill(Color.GREEN);
+
+                // Обновляем кнопку
+                Button readyButton = (Button) lookup("#readyButton");
+                if (readyButton != null) {
+                    readyButton.setText("✓ Готов");
+                    readyButton.setStyle("-fx-background-color: #27AE60; -fx-text-fill: white;");
+                    readyButton.setDisable(true);
+                }
+            });
+
+            // Проверяем готовность противника
+            if (opponentReady) {
+                System.out.println("Противник уже готов! Начинаем игру...");
+                startGame("opponent");
+            } else {
+                System.out.println("Ждем готовности противника...");
+            }
+
+        } else {
+            iAmReady = false;
+            System.out.println("ОШИБКА: Не удалось отправить сообщение");
+            showError("Не удалось отправить сигнал готовности. Проверьте соединение.");
+        }
+
+        System.out.println("=== ЗАВЕРШЕНИЕ ОТПРАВКИ СИГНАЛА ГОТОВНОСТИ ===");
+    }
+
+    private void hostGame() {
+        try {
+            System.out.println("Запуск сервера игры с встроенным чатом...");
+
+            String localIP = getLocalIP();
+            statusLabel.setText("Сервер запускается... IP: " + localIP);
+
+            gameServer = new GameServer();
+            gameServer.start(5555, new GameServer.GameMessageListener() {
+                @Override
+                public void onMessageReceived(String message) {
+                    System.out.println("Хост получил от сервера: " + message);
+                    handleMessage(message); // Важно: вызываем handleMessage
+                }
+
+                @Override
+                public void onClientConnected(String clientAddress) {
+                    Platform.runLater(() -> {
+                        System.out.println("Клиент подключен: " + clientAddress);
+                        statusLabel.setText("Противник подключен: " + clientAddress);
+
+                        // Приветственное сообщение в чат
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Противник подключился к игре\n");
+                        }
+                    });
+                }
+
+                @Override
+                public void onConnectionClosed() {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Соединение разорвано");
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Противник отключился\n");
+                        }
+                        gameStarted = false;
+                    });
+                }
+            });
+
+            statusLabel.setText("Сервер запущен. Ожидаем подключения...");
+            showInfo("Сервер запущен на порту 5555. Ваш IP: " + localIP + "\nСообщите этот IP другому игроку.");
+
+        } catch (Exception e) {
+            showError("Ошибка запуска сервера: " + e.getMessage());
+            System.err.println("Ошибка hostGame: " + e.getMessage());
+        }
+    }
+
+    private void openGameChat() {
+        if (chatPanel != null) {
+            // Просто фокусируемся на поле ввода
+            chatInput.requestFocus();
+
+            if (!chatInitialized) {
+                initializeChat();
+            }
+
+            showInfo("Чат активен. Введите сообщение и нажмите Enter.");
+        } else {
+            showInfo("Чат доступен только в сетевой игре");
+        }
+    }
+
+    private void connectToGame(String serverAddress) {
+        try {
+            System.out.println("Подключение к " + serverAddress + ":5555");
+
+            gameClient = new GameClient();
+            gameClient.connect(serverAddress, 5555, new GameClient.GameMessageListener() {
+                @Override
+                public void onMessageReceived(String message) {
+                    System.out.println("Клиент получил: " + message);
+                    handleMessage(message);
+                }
+
+                @Override
+                public void onChatMessageReceived(String sender, String message) {
+                    handleChatMessage(sender, message);
+                }
+
+                @Override
+                public void onConnected() {
+                    Platform.runLater(() -> {
+                        System.out.println("Успешно подключено к серверу");
+                        statusLabel.setText("Подключено к " + serverAddress);
+                        playerLabel.setText("Клиент (Ожидание хода)");
+                        connectionType = "client";
+
+                        // Приветственное сообщение в чат
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Подключено к игре\n");
+                            chatArea.appendText("⚡ Вы - клиент\n");
+                            chatArea.appendText("⚡ Можете общаться в чате\n");
+                        }
+
+                        showInfo("Успешно подключено! Расставьте корабли и нажмите 'Готов'.");
+                    });
+                }
+
+                @Override
+                public void onConnectionClosed() {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Соединение разорвано");
+                        if (chatArea != null) {
+                            chatArea.appendText("⚡ Соединение с сервером потеряно\n");
+                        }
+                        gameStarted = false;
+                    });
+                }
+            });
+
+        } catch (Exception e) {
+            showError("Не удалось подключиться к " + serverAddress + ": " + e.getMessage());
+            System.err.println("Ошибка подключения: " + e.getMessage());
+
+            Platform.runLater(() -> {
+                Alert retryAlert = new Alert(Alert.AlertType.CONFIRMATION);
+                retryAlert.setTitle("Ошибка подключения");
+                retryAlert.setHeaderText("Не удалось подключиться к серверу");
+                retryAlert.setContentText("Хотите попробовать другой адрес?");
+
+                Optional<ButtonType> retryResult = retryAlert.showAndWait();
+                if (retryResult.isPresent() && retryResult.get() == ButtonType.OK) {
+                    connectionDialogShown = false;
+                    showConnectDialog();
+                } else {
+                    goBack();
+                }
+            });
+        }
+    }
+
+    private void placeAllShipsAutomatically() {
+        System.out.println("Начинаем автоматическую расстановку кораблей...");
+
+        // Сбрасываем игрока
+        player = new Player("Игрок");
+
+        // Расставляем корабли от большего к меньшему (это повышает вероятность успеха)
+        // Для этого нужно отсортировать корабли по размеру
+
+        // Создаем список кораблей
+        List<Ship> shipsToPlace = new ArrayList<>(player.getShips());
+
+        // Сортируем корабли по размеру (от большего к меньшему)
+        shipsToPlace.sort((s1, s2) -> Integer.compare(s2.getSize(), s1.getSize()));
+
+        System.out.println("Кораблей для расстановки: " + shipsToPlace.size());
+
+        for (Ship ship : shipsToPlace) {
+            System.out.println("Расставляем корабль размером " + ship.getSize() + "...");
+
+            boolean placed = false;
+            int attempts = 0;
+            int maxAttempts = 200; // Увеличиваем количество попыток
+
+            while (!placed && attempts < maxAttempts) {
+                int x = (int) (Math.random() * 10);
+                int y = (int) (Math.random() * 10);
+                ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
+
+                // Проверяем, можно ли разместить корабль с учетом свободного пространства
+                if (canPlaceShipWithMargin(ship, x, y, direction)) {
+                    if (player.placeShip(ship, x, y, direction)) {
+                        placed = true;
+                        System.out.println("✓ Корабль размером " + ship.getSize() +
+                                " размещен в (" + x + "," + y + ") " +
+                                (direction == ShipDirection.HORIZONTAL ? "горизонтально" : "вертикально"));
+                    }
+                }
+                attempts++;
+            }
+
+            if (!placed) {
+                System.out.println("✗ Не удалось разместить корабль размером " + ship.getSize());
+                // Попробуем без свободного пространства как запасной вариант
+                placed = tryPlaceShipWithoutMargin(ship);
+
+                if (!placed) {
+                    showError("Не удалось разместить корабль автоматически!");
+                    // Попробуем сбросить и начать заново
+                    resetAndTryAgain();
+                    return;
+                }
+            }
+        }
+
+        updatePlayerGrid();
+        showInfo("Все корабли расставлены с учетом свободного пространства!");
+
+        // Обновляем состояние кнопки "Готов"
+        updateReadyButtonState();
+    }
+
+    private boolean canPlaceShipWithMargin(Ship ship, int x, int y, ShipDirection direction) {
+        int size = ship.getSize();
+        GameBoard board = player.getBoard();
+
+        if (direction == ShipDirection.HORIZONTAL) {
+            // Проверяем, помещается ли корабль в поле
+            if (x + size > 10) return false;
+
+            // Проверяем клетки корабля и область вокруг
+            for (int i = -1; i <= size; i++) {
+                for (int j = -1; j <= 1; j++) {
+                    int checkX = x + i;
+                    int checkY = y + j;
+
+                    // Проверяем только в пределах поля
+                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
+                        // Если это клетка корабля (не буферная зона)
+                        if (j == 0 && i >= 0 && i < size) {
+                            // Проверяем, пуста ли клетка
+                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
+                                return false;
+                            }
+                        } else {
+                            // Это буферная зона - проверяем, нет ли там других кораблей
+                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
+        } else { // VERTICAL
+            // Проверяем, помещается ли корабль в поле
+            if (y + size > 10) return false;
+
+            // Проверяем клетки корабля и область вокруг
+            for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= size; j++) {
+                    int checkX = x + i;
+                    int checkY = y + j;
+
+                    // Проверяем только в пределах поля
+                    if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
+                        // Если это клетка корабля (не буферная зона)
+                        if (i == 0 && j >= 0 && j < size) {
+                            // Проверяем, пуста ли клетка
+                            if (board.getCell(checkX, checkY) != GameBoard.CellState.EMPTY) {
+                                return false;
+                            }
+                        } else {
+                            // Это буферная зона - проверяем, нет ли там других кораблей
+                            if (board.getCell(checkX, checkY) == GameBoard.CellState.SHIP) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+
+    private boolean tryPlaceShipWithoutMargin(Ship ship) {
+        boolean placed = false;
+        int attempts = 0;
+
+        while (!placed && attempts < 100) {
+            int x = (int) (Math.random() * 10);
+            int y = (int) (Math.random() * 10);
+            ShipDirection direction = Math.random() > 0.5 ? ShipDirection.HORIZONTAL : ShipDirection.VERTICAL;
+
+            if (player.placeShip(ship, x, y, direction)) {
+                placed = true;
+                System.out.println("✓ Корабль размером " + ship.getSize() +
+                        " размещен БЕЗ свободного пространства");
+            }
+            attempts++;
+        }
+
+        return placed;
+    }
+
+    private void resetAndTryAgain() {
+        System.out.println("Пробуем расставить корабли заново...");
+        player = new Player("Игрок");
+
+        // Вызываем рекурсивно, но с ограничением глубины
+        placeAllShipsAutomatically();
+    }
+
+    private String getLocalIP() {
+        try {
+            return java.net.InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "неизвестен";
+        }
+    }
+
+    private void handleMessage(String message) {
+        Platform.runLater(() -> {
+            try {
+                System.out.println("Получено сообщение: " + message);
+
+                if (message.startsWith("READY:")) {
+                    handleReadyMessage(message);
+                } else if (message.startsWith("ATTACK:")) {
+                    handleAttackMessage(message);
+                } else if (message.startsWith("RESULT:")) {
+                    handleResultMessage(message);
+                } else if (message.startsWith("WIN:")) {
+                    handleWinMessage(message);
+                } else if (message.startsWith("CHATMSG:")) {
+                    // Это форматированное сообщение для отображения
+                    String chatContent = message.substring(8); // Убираем "CHATMSG:"
+                    System.out.println("Обработка CHATMSG: " + chatContent);
+
+                    int colonIndex = chatContent.indexOf(":");
+                    if (colonIndex != -1) {
+                        String sender = chatContent.substring(0, colonIndex);
+                        String chatMessage = chatContent.substring(colonIndex + 1);
+
+                        // Определяем, наше ли это сообщение
+                        String myUsername = getUsername();
+                        System.out.println("Отправитель: " + sender + ", я: " + myUsername);
+
+                        if (sender.equals(myUsername)) {
+                            // Это наше сообщение, показываем как "Вы"
+                            chatArea.appendText("Вы (" + sender + "): " + chatMessage + "\n");
+                        } else {
+                            // Это сообщение от противника
+                            chatArea.appendText(sender + ": " + chatMessage + "\n");
+                        }
+                    }
+                } else if (message.startsWith("CHAT:")) {
+                    // Это сырое сообщение - для совместимости
+                    String chatContent = message.substring(5);
+                    System.out.println("Обработка CHAT (совместимость): " + chatContent);
+
+                    if (chatContent.contains(":")) {
+                        int colonIndex = chatContent.indexOf(":");
+                        String sender = chatContent.substring(0, colonIndex);
+                        String chatMessage = chatContent.substring(colonIndex + 1);
+
+                        String myUsername = getUsername();
+                        if (sender.equals(myUsername)) {
+                            chatArea.appendText("Вы (" + sender + "): " + chatMessage + "\n");
+                        } else {
+                            chatArea.appendText(sender + ": " + chatMessage + "\n");
+                        }
+                    }
+                } else if (message.equals("READY")) {
+                    handleReadyMessage("READY:unknown");
+                }
+
+            } catch (Exception e) {
+                System.err.println("Ошибка обработки сообщения: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
+
     private Node getNodeFromGridPane(GridPane gridPane, int col, int row) {
         for (Node node : gridPane.getChildren()) {
             if (GridPane.getColumnIndex(node) == col && GridPane.getRowIndex(node) == row) {
@@ -1236,11 +1070,240 @@ public class GameController extends BorderPane {
         return null;
     }
 
-    private void setStatus(String message, Color color) {
+    private void handleReadyMessage(String message) {
         Platform.runLater(() -> {
-            statusLabel.setText(message);
-            statusLabel.setTextFill(color);
+            try {
+                String[] parts = message.split(":");
+                String opponentType = parts.length > 1 ? parts[1] : "unknown";
+
+                opponentReady = true;
+                System.out.println("Противник готов. Тип: " + opponentType);
+
+                showInfo("Противник готов к игру!");
+
+                // Автоматически активируем чат при готовности противника
+                if (chatArea != null) {
+                    chatArea.appendText("⚡ Противник готов к игре!\n");
+                    chatArea.appendText("⚡ Теперь можете общаться в чате\n");
+                    chatInput.requestFocus(); // Фокус на поле ввода
+                }
+
+                if (iAmReady) {
+                    statusLabel.setText("Оба игрока готовы! Начинаем игру...");
+                    statusLabel.setTextFill(Color.GREEN);
+
+                    // Отправляем приветственное сообщение в чат
+                    sendWelcomeChatMessage();
+
+                    // Запускаем игру через 3 секунды
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(3000);
+                            Platform.runLater(() -> startGame(opponentType));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+                } else {
+                    statusLabel.setText("Противник готов. Вы еще не готовы.");
+                    statusLabel.setTextFill(Color.ORANGE);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Ошибка обработки READY: " + e.getMessage());
+            }
         });
+    }
+
+    private void startGame(String opponentType) {
+        if (!gameStarted) {
+            gameStarted = true;
+            System.out.println("Игра началась! Противник: " + opponentType);
+
+            // Определяем, кто ходит первым
+            if (connectionType != null && opponentType != null) {
+                if (connectionType.equals("host") && opponentType.equals("client")) {
+                    isMyTurn = true; // Хост ходит первым
+                } else if (connectionType.equals("client") && opponentType.equals("host")) {
+                    isMyTurn = false; // Клиент ходит вторым
+                } else {
+                    // Случайный выбор
+                    isMyTurn = Math.random() > 0.5;
+                }
+            } else {
+                isMyTurn = Math.random() > 0.5;
+            }
+
+            if (isMyTurn) {
+                statusLabel.setText("Игра началась! Ваш ход.");
+                statusLabel.setTextFill(Color.LIGHTGREEN);
+                setEnemyFieldEnabled(true);
+                showAlert("Игра началась!", "Ваш ход! Атакуйте поле противника.");
+            } else {
+                statusLabel.setText("Игра началась! Ход противника.");
+                statusLabel.setTextFill(Color.ORANGE);
+                setEnemyFieldEnabled(false);
+                showAlert("Игра началась!", "Ход противника. Ожидайте своей очереди.");
+            }
+        }
+    }
+
+    private void setEnemyFieldEnabled(boolean enabled) {
+        if (enemyGrid != null) {
+            for (javafx.scene.Node node : enemyGrid.getChildren()) {
+                node.setDisable(!enabled);
+                if (enabled) {
+                    node.setOpacity(1.0);
+                    node.setCursor(javafx.scene.Cursor.HAND);
+                } else {
+                    node.setOpacity(0.7);
+                    node.setCursor(javafx.scene.Cursor.DEFAULT);
+                }
+            }
+        }
+    }
+
+    private void sendWelcomeChatMessage() {
+        String welcomeMessage = "Привет! Готов играть!";
+        if (gameClient != null && gameClient.isConnected()) {
+            gameClient.sendChatMessage(welcomeMessage);
+        } else if (gameServer != null && gameServer.isRunning()) {
+            gameServer.sendMessage("CHAT:" + welcomeMessage);
+        }
+    }
+
+    private void handleAttackMessage(String message) {
+        try {
+            String[] parts = message.substring(7).split(",");
+            int x = Integer.parseInt(parts[0]);
+            int y = Integer.parseInt(parts[1]);
+
+            System.out.println("[GameController] Атака противника: " + x + "," + y);
+
+            GameBoard.CellState result = player.attack(x, y);
+
+            // Отправляем результат
+            String response = "RESULT:" + x + "," + y + "," + result;
+            if (gameClient != null && gameClient.isConnected()) {
+                gameClient.sendMessage(response);
+            } else if (gameServer != null && gameServer.isRunning()) {
+                gameServer.sendMessage(response);
+            }
+
+            updatePlayerGrid();
+
+            // Проверяем, не потопил ли противник все наши корабли
+            if (player.allShipsSunk()) {
+                // Мы проиграли
+                System.out.println("[GameController] ПОРАЖЕНИЕ! Все наши корабли потоплены");
+
+                Platform.runLater(() -> {
+                    statusLabel.setText("ВЫ ПРОИГРАЛИ!");
+                    statusLabel.setTextFill(Color.RED);
+                    gameStarted = false;
+                    setEnemyFieldEnabled(false);
+
+                    // Отправляем сообщение о победе противнику
+                    String winMessage = "WIN:you";
+                    if (gameClient != null) gameClient.sendMessage(winMessage);
+                    if (gameServer != null) gameServer.sendMessage(winMessage);
+
+                    showAlert("Игра окончена", "Вы проиграли! Все ваши корабли потоплены.");
+                });
+            } else {
+                // Теперь наш ход
+                isMyTurn = true;
+                statusLabel.setText("Ваш ход");
+                statusLabel.setTextFill(Color.LIGHTGREEN);
+                setEnemyFieldEnabled(true);
+            }
+
+        } catch (Exception e) {
+            System.err.println("[GameController] Ошибка обработки атаки: " + e.getMessage());
+        }
+    }
+
+    private void handleResultMessage(String message) {
+        try {
+            String[] parts = message.substring(7).split(",");
+            int x = Integer.parseInt(parts[0]);
+            int y = Integer.parseInt(parts[1]);
+            String result = parts[2];
+
+            Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
+            if (cell != null) {
+                if (result.equals("HIT") || result.equals("SUNK")) {
+                    cell.setFill(Color.RED);
+                    enemyHits++;
+
+                    System.out.println("[GameController] Попадание! Всего попаданий: " + enemyHits + "/" + totalEnemyCells);
+
+                    // Проверяем победу
+                    if (enemyHits >= totalEnemyCells) {
+                        handleVictory();
+                        return;
+                    }
+
+                    // Дополнительный ход при попадании
+                    isMyTurn = true;
+                    statusLabel.setText("Вы попали! Стреляйте снова");
+                    statusLabel.setTextFill(Color.LIGHTGREEN);
+                    setEnemyFieldEnabled(true);
+
+                } else if (result.equals("MISS")) {
+                    cell.setFill(Color.WHITE);
+
+                    // Промах - ход противника
+                    isMyTurn = false;
+                    statusLabel.setText("Ход противника");
+                    statusLabel.setTextFill(Color.ORANGE);
+                    setEnemyFieldEnabled(false);
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("[GameController] Ошибка: " + e.getMessage());
+        }
+    }
+
+    private void handleVictory() {
+        System.out.println("[GameController] ПОБЕДА! Все корабли противника потоплены!");
+
+        Platform.runLater(() -> {
+            statusLabel.setText("ВЫ ВЫИГРАЛИ!");
+            statusLabel.setTextFill(Color.GREEN);
+            gameStarted = false;
+            setEnemyFieldEnabled(false);
+
+            // Отправляем сообщение о победе
+            String winMessage = "WIN:you";
+            if (gameClient != null && gameClient.isConnected()) {
+                gameClient.sendMessage(winMessage);
+            } else if (gameServer != null && gameServer.isRunning()) {
+                gameServer.sendMessage(winMessage);
+            }
+
+            showAlert("Поздравляем!", "Вы выиграли! Все корабли противника потоплены.");
+        });
+    }
+
+    private void handleWinMessage(String message) {
+        System.out.println("[GameController] Получено сообщение о победе: " + message);
+
+        Platform.runLater(() -> {
+            if (message.equals("WIN:you")) {
+                statusLabel.setText("ВЫ ПРОИГРАЛИ!");
+                statusLabel.setTextFill(Color.RED);
+                gameStarted = false;
+                setEnemyFieldEnabled(false);
+                showAlert("Игра окончена", "Вы проиграли! Все ваши корабли потоплены.");
+            }
+        });
+    }
+
+    private void showInfo(String message) {
+        System.out.println("INFO: " + message);
+        // Можно добавить отображение в чат или статус-бар
     }
 
     private void showAlert(String title, String message) {
@@ -1251,5 +1314,91 @@ public class GameController extends BorderPane {
             alert.setContentText(message);
             alert.showAndWait();
         });
+    }
+
+    private void showError(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Ошибка");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    private void goBack() {
+        // Сохраняем ссылки на приложение до закрытия соединений
+        HelloApplication app = HelloApplication.getInstance();
+
+        if (chatArea != null) {
+            chatArea.clear();
+            chatInitialized = false;
+        }
+        // Закрываем соединения в правильном порядке
+        try {
+            if (gameClient != null) {
+                gameClient.disconnect();
+                gameClient = null;
+            }
+
+            if (gameServer != null) {
+                gameServer.stop();
+                gameServer = null;
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка при закрытии соединений: " + e.getMessage());
+            // Не прерываем выход из-за ошибки закрытия
+        }
+
+        // Делаем небольшую паузу для завершения операций закрытия
+        new Thread(() -> {
+            try {
+                Thread.sleep(100); // 100ms пауза
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            Platform.runLater(() -> {
+                if (app != null && app.getNavigator() != null) {
+                    app.getNavigator().navigateBack();
+                }
+            });
+        }).start();
+    }
+
+    private void restartGame() {
+        System.out.println("[GameController] Перезапуск игры...");
+
+        if (chatArea != null) {
+            chatArea.clear();
+            chatInitialized = false;
+            initializeChat();
+        }
+        chatLaunched = false;
+
+        // Сбрасываем игроков
+        player = new Player("Игрок");
+        enemy = new Player("Противник");
+
+        // Сбрасываем состояние игры
+        isMyTurn = false;
+        gameStarted = false;
+        iAmReady = false;
+        opponentReady = false;
+        enemyHits = 0;
+
+        // Перерасставляем корабли
+        placeAllShipsAutomatically();
+
+        // Обновляем UI
+        updatePlayerGrid();
+        updateEnemyGrid();
+
+        statusLabel.setText("Расставьте корабли");
+        statusLabel.setTextFill(Color.WHITE);
+        setEnemyFieldEnabled(false);
+
+        // Обновляем кнопку "Готов"
+        updateReadyButtonState();
+
+        System.out.println("[GameController] Игра перезапущена");
     }
 }
