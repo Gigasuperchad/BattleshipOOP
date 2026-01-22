@@ -39,7 +39,6 @@ public class GameController extends BorderPane {
     private VBox chatPanel;
     private TextArea chatArea;
     private TextField chatInput;
-    private Button chatSendButton;
     private boolean chatInitialized = false;
 
     // Игровое состояние
@@ -277,7 +276,7 @@ public class GameController extends BorderPane {
         // Обработка нажатия Enter
         chatInput.setOnAction(e -> sendChatMessage());
 
-        chatSendButton = new Button("➤");
+        Button chatSendButton = new Button("➤");
         chatSendButton.setStyle(
                 "-fx-background-color: #4CAF50; " +
                         "-fx-text-fill: white; " +
@@ -604,6 +603,16 @@ public class GameController extends BorderPane {
                     turnIndicator.setText("⚓  Запустите сервер");
                     turnIndicator.setTextFill(FXDesignHelper.Colors.WARNING);
                     setStatus("Нажмите 'Запустить сервер' для создания игры", FXDesignHelper.Colors.TEXT_GOLD);
+
+                    // Автоматически запускаем сервер с задержкой
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(2000);
+                            Platform.runLater(() -> hostGame());
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
                     break;
 
                 case "client":
@@ -611,6 +620,16 @@ public class GameController extends BorderPane {
                     turnIndicator.setText("⚓  Подключитесь к серверу");
                     turnIndicator.setTextFill(FXDesignHelper.Colors.WARNING);
                     setStatus("Введите IP-адрес сервера для подключения", FXDesignHelper.Colors.TEXT_GOLD);
+
+                    // Автоматически показываем диалог подключения с задержкой
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(1000);
+                            Platform.runLater(() -> showConnectDialog());
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
                     break;
 
                 case "single":
@@ -1106,7 +1125,10 @@ public class GameController extends BorderPane {
 
     // Показать диалог подключения
     private void showConnectDialog() {
-        if (connectionDialogShown) return;
+        if (connectionDialogShown) {
+            return; // Не показывать повторно
+        }
+
         connectionDialogShown = true;
 
         TextInputDialog dialog = new TextInputDialog("localhost");
@@ -1121,6 +1143,7 @@ public class GameController extends BorderPane {
             connectToGame(serverAddress);
         } else {
             setStatus("Подключение отменено", FXDesignHelper.Colors.ERROR);
+            connectionDialogShown = false; // Сбрасываем флаг, чтобы можно было открыть снова
         }
     }
 
@@ -1153,6 +1176,7 @@ public class GameController extends BorderPane {
 
         } catch (Exception e) {
             setStatus("Ошибка подключения: " + e.getMessage(), FXDesignHelper.Colors.ERROR);
+            connectionDialogShown = false; // При ошибке сбрасываем флаг
         }
     }
 
@@ -1170,6 +1194,7 @@ public class GameController extends BorderPane {
         iAmReady = false;
         opponentReady = false;
         enemyHits = 0;
+        connectionDialogShown = false; // Сбрасываем флаг диалога
 
         // Перерасставляем корабли
         placeAllShipsAutomatically();
