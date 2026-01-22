@@ -12,8 +12,13 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.Stop;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.InnerShadow;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,12 +35,12 @@ public class GameController extends BorderPane {
     private Label playerLabel;
     private boolean isMyTurn;
     private boolean gameStarted;
-    private String connectionType; // "host" или "client"
+    private String connectionType;
     private boolean opponentReady = false;
     private boolean iAmReady = false;
     private int enemyHits = 0;
-    private final int totalEnemyCells = 20; // 10 кораблей у противника
-    private String gameMode = "single"; // "single", "host", "client"
+    private final int totalEnemyCells = 20;
+    private String gameMode = "single";
     private boolean connectionDialogShown = false;
     private ChatManager chatManager;
     private boolean chatLaunched = false;
@@ -60,17 +65,22 @@ public class GameController extends BorderPane {
         initializeUI();
         initializeGame();
 
-        // Автоматически запускаем действия для режима
         initializeForMode();
     }
 
-    // Оставьте старый конструктор для обратной совместимости
+
     public GameController() {
-        this("single"); // По умолчанию одиночная игра
+        this("single");
     }
 
     private void initializeUI() {
-        setBackground(new Background(new BackgroundFill(Color.DARKSLATEGRAY, CornerRadii.EMPTY, Insets.EMPTY)));
+        // Красивый градиентный фон
+        LinearGradient gradient = new LinearGradient(
+                0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#1a2980")),
+                new Stop(1, Color.web("#26d0ce"))
+        );
+        setBackground(new Background(new BackgroundFill(gradient, CornerRadii.EMPTY, Insets.EMPTY)));
 
         HBox topPanel = createTopPanel();
         setTop(topPanel);
@@ -92,10 +102,9 @@ public class GameController extends BorderPane {
                     playerLabel.setText("Создание игры (Хост)");
                     statusLabel.setText("Нажмите 'Запустить сервер'");
                     showInfo("Вы создаете игру. Другой игрок должен подключиться к вашему IP.");
-                    // Автоматически запускаем сервер
                     new Thread(() -> {
                         try {
-                            Thread.sleep(500); // Небольшая задержка для инициализации UI
+                            Thread.sleep(500);
                             Platform.runLater(() -> hostGame());
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
@@ -107,10 +116,9 @@ public class GameController extends BorderPane {
                     playerLabel.setText("Подключение к игре");
                     statusLabel.setText("Введите IP-адрес сервера");
                     showInfo("Подключитесь к игре, введя IP-адрес хоста.");
-                    // Автоматически показываем диалог подключения
                     new Thread(() -> {
                         try {
-                            Thread.sleep(500); // Небольшая задержка для инициализации UI
+                            Thread.sleep(500);
                             Platform.runLater(() -> showConnectDialog());
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
@@ -135,10 +143,9 @@ public class GameController extends BorderPane {
                     statusLabel.setText("Запуск сервера...");
                     showInfo("Вы создаете игру. Сообщите свой IP другому игроку.");
 
-                    // Запускаем сервер в фоновом режиме
                     new Thread(() -> {
                         try {
-                            Thread.sleep(2000); // Даем время на инициализацию UI
+                            Thread.sleep(2000);
                             Platform.runLater(() -> hostGame());
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
@@ -151,7 +158,6 @@ public class GameController extends BorderPane {
                     statusLabel.setText("Введите IP-адрес сервера");
                     showInfo("Подключитесь к игре, введя IP-адрес хоста.");
 
-                    // Показываем диалог с задержкой
                     new Thread(() -> {
                         try {
                             Thread.sleep(1000);
@@ -167,7 +173,7 @@ public class GameController extends BorderPane {
 
     private void showConnectDialog() {
         if (connectionDialogShown) {
-            return; // Не показываем диалог повторно
+            return;
         }
 
         connectionDialogShown = true;
@@ -178,13 +184,16 @@ public class GameController extends BorderPane {
         dialog.setContentText("IP-адрес:");
         dialog.getDialogPane().setPrefSize(400, 150);
 
+        dialog.getDialogPane().setStyle("-fx-background-color: linear-gradient(to bottom, #2C3E50, #4CA1AF);");
+        dialog.getDialogPane().lookupButton(ButtonType.OK).setStyle(getButtonStyle("#27AE60", "#2ECC71"));
+        dialog.getDialogPane().lookupButton(ButtonType.CANCEL).setStyle(getButtonStyle("#E74C3C", "#EC7063"));
+
         Optional<String> result = dialog.showAndWait();
         if (result.isPresent() && !result.get().trim().isEmpty()) {
             String serverAddress = result.get().trim();
             System.out.println("Подключение к серверу: " + serverAddress);
             connectToGame(serverAddress);
         } else {
-            // Если пользователь отменил, возвращаемся в меню
             showInfo("Подключение отменено. Возвращаемся в меню...");
             new Thread(() -> {
                 try {
@@ -208,15 +217,20 @@ public class GameController extends BorderPane {
         HBox topPanel = new HBox(20);
         topPanel.setAlignment(Pos.CENTER);
         topPanel.setPadding(new Insets(15));
-        topPanel.setStyle("-fx-background-color: #2C3E50;");
+
+        topPanel.setStyle("-fx-background-color: linear-gradient(to right, #2C3E50, #4CA1AF); " +
+                "-fx-background-radius: 0 0 15 15; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0.5, 0, 2);");
 
         playerLabel = new Label("Игрок 1");
-        playerLabel.setFont(Font.font("Arial", 20));
+        playerLabel.setFont(Font.font("Arial Bold", 24));
         playerLabel.setTextFill(Color.WHITE);
+        playerLabel.setEffect(new DropShadow(5, Color.BLACK));
 
         statusLabel = new Label("Расставьте корабли");
-        statusLabel.setFont(Font.font("Arial", 16));
-        statusLabel.setTextFill(Color.LIGHTGREEN);
+        statusLabel.setFont(Font.font("Arial", 18));
+        statusLabel.setTextFill(Color.web("#F1C40F"));
+        statusLabel.setEffect(new InnerShadow(3, Color.BLACK));
 
         topPanel.getChildren().addAll(playerLabel, statusLabel);
         return topPanel;
@@ -230,12 +244,10 @@ public class GameController extends BorderPane {
         VBox playerField = createPlayerField();
         VBox enemyField = createEnemyField();
 
-        // Создаем панель чата для сетевой игры
         if (gameMode.equals("host") || gameMode.equals("client")) {
             chatPanel = createChatPanel();
             gameArea.getChildren().addAll(playerField, enemyField, chatPanel);
         } else {
-            // Для одиночной игры чат не нужен
             gameArea.getChildren().addAll(playerField, enemyField);
         }
 
@@ -245,45 +257,62 @@ public class GameController extends BorderPane {
     private VBox createChatPanel() {
         VBox chatPanel = new VBox(5);
         chatPanel.setPrefWidth(300);
-        chatPanel.setStyle("-fx-background-color: rgba(30, 34, 42, 0.95); -fx-padding: 10; -fx-border-color: #4CAF50; -fx-border-width: 2; -fx-border-radius: 5;");
+        chatPanel.setStyle("-fx-background-color: linear-gradient(to bottom, rgba(44, 62, 80, 0.95), rgba(76, 161, 175, 0.95)); " +
+                "-fx-background-radius: 10; " +
+                "-fx-padding: 10; " +
+                "-fx-border-color: linear-gradient(to bottom, #2ECC71, #27AE60); " +
+                "-fx-border-width: 2; " +
+                "-fx-border-radius: 10; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 15, 0.5, 0, 3);");
 
         // Заголовок чата
         HBox titleBox = new HBox();
         titleBox.setAlignment(Pos.CENTER_LEFT);
 
         Label chatTitle = new Label("💬 Игровой чат");
-        chatTitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #4CAF50; -fx-font-weight: bold;");
+        chatTitle.setStyle("-fx-font-size: 16px; " +
+                "-fx-text-fill: #2ECC71; " +
+                "-fx-font-weight: bold; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0.5, 0, 1);");
 
         titleBox.getChildren().add(chatTitle);
 
-        // Область сообщений
         chatArea = new TextArea();
         chatArea.setEditable(false);
         chatArea.setWrapText(true);
         chatArea.setPrefHeight(400);
-        chatArea.setStyle("-fx-control-inner-background: #2C3E50; -fx-text-fill: #ECF0F1; -fx-font-family: 'Consolas'; -fx-font-size: 12px;");
+        chatArea.setStyle("-fx-control-inner-background: #2C3E50; " +
+                "-fx-text-fill: #ECF0F1; " +
+                "-fx-font-family: 'Consolas'; " +
+                "-fx-font-size: 12px; " +
+                "-fx-background-radius: 5; " +
+                "-fx-border-radius: 5; " +
+                "-fx-border-color: #34495E;");
 
-        // Панель ввода
         HBox inputBox = new HBox(5);
         inputBox.setPadding(new Insets(5, 0, 0, 0));
 
         chatInput = new TextField();
         chatInput.setPromptText("Введите сообщение...");
         chatInput.setPrefWidth(200);
-        chatInput.setStyle("-fx-background-color: #34495E; -fx-text-fill: white; -fx-prompt-text-fill: #95A5A6; -fx-border-color: #4CAF50; -fx-border-width: 1;");
+        chatInput.setStyle("-fx-background-color: #34495E; " +
+                "-fx-text-fill: white; " +
+                "-fx-prompt-text-fill: #95A5A6; " +
+                "-fx-border-color: linear-gradient(to right, #2ECC71, #27AE60); " +
+                "-fx-border-width: 2; " +
+                "-fx-background-radius: 5; " +
+                "-fx-border-radius: 5;");
 
-        // Обработка нажатия Enter
         chatInput.setOnAction(e -> sendChatMessage());
 
-        chatSendButton = new Button("➤");
-        chatSendButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-min-width: 40;");
+        chatSendButton = createStyledButton("➤", "#2ECC71", "#27AE60");
+        chatSendButton.setMinWidth(40);
         chatSendButton.setOnAction(e -> sendChatMessage());
 
         inputBox.getChildren().addAll(chatInput, chatSendButton);
 
         chatPanel.getChildren().addAll(titleBox, chatArea, inputBox);
 
-        // Инициализируем чат
         initializeChat();
 
         return chatPanel;
@@ -316,17 +345,13 @@ public class GameController extends BorderPane {
         if (!message.isEmpty()) {
             String username = getUsername();
 
-            // Временное решение: хост сразу показывает свое сообщение
             if (gameServer != null && gameServer.isRunning()) {
-                // Хост - сразу добавляем в чат
                 chatArea.appendText("Вы (" + username + "): " + message + "\n");
 
-                // И отправляем
                 gameServer.sendMessage("CHATMSG:" + username + ":" + message);
                 chatInput.clear();
             }
             else if (gameClient != null && gameClient.isConnected()) {
-                // Клиент - только отправляем
                 gameClient.sendMessage("CHATMSG:" + username + ":" + message);
                 chatInput.clear();
             }
@@ -345,8 +370,9 @@ public class GameController extends BorderPane {
         fieldBox.setAlignment(Pos.CENTER);
 
         Label titleLabel = new Label("Ваше поле");
-        titleLabel.setFont(Font.font("Arial", 18));
+        titleLabel.setFont(Font.font("Arial Bold", 20));
         titleLabel.setTextFill(Color.WHITE);
+        titleLabel.setEffect(new DropShadow(5, Color.BLACK));
 
         playerGrid = new GridPane();
         playerGrid.setHgap(2);
@@ -355,8 +381,12 @@ public class GameController extends BorderPane {
         for (int row = 0; row < 10; row++) {
             for (int col = 0; col < 10; col++) {
                 Rectangle cell = new Rectangle(35, 35);
-                cell.setFill(Color.LIGHTBLUE);
-                cell.setStroke(Color.DARKBLUE);
+                cell.setFill(Color.web("#3498DB", 0.7));
+                cell.setStroke(Color.web("#2C3E50"));
+                cell.setStrokeWidth(1.5);
+                cell.setArcWidth(5);
+                cell.setArcHeight(5);
+                cell.setEffect(new InnerShadow(2, Color.BLACK));
 
                 final int x = col;
                 final int y = row;
@@ -387,8 +417,9 @@ public class GameController extends BorderPane {
         fieldBox.setAlignment(Pos.CENTER);
 
         Label titleLabel = new Label("Поле противника");
-        titleLabel.setFont(Font.font("Arial", 18));
+        titleLabel.setFont(Font.font("Arial Bold", 20));
         titleLabel.setTextFill(Color.WHITE);
+        titleLabel.setEffect(new DropShadow(5, Color.BLACK));
 
         enemyGrid = new GridPane();
         enemyGrid.setHgap(2);
@@ -397,8 +428,12 @@ public class GameController extends BorderPane {
         for (int row = 0; row < 10; row++) {
             for (int col = 0; col < 10; col++) {
                 Rectangle cell = new Rectangle(35, 35);
-                cell.setFill(Color.LIGHTBLUE);
-                cell.setStroke(Color.DARKBLUE);
+                cell.setFill(Color.web("#E74C3C", 0.7));
+                cell.setStroke(Color.web("#2C3E50"));
+                cell.setStrokeWidth(1.5);
+                cell.setArcWidth(5);
+                cell.setArcHeight(5);
+                cell.setEffect(new InnerShadow(2, Color.BLACK));
 
                 final int x = col;
                 final int y = row;
@@ -421,14 +456,17 @@ public class GameController extends BorderPane {
         HBox bottomPanel = new HBox(15);
         bottomPanel.setAlignment(Pos.CENTER);
         bottomPanel.setPadding(new Insets(15));
+        bottomPanel.setStyle("-fx-background-color: linear-gradient(to right, #2C3E50, #4CA1AF); " +
+                "-fx-background-radius: 15 15 0 0; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0.5, 0, -2);");
 
-        Button backButton = new Button("В главное меню");
+        Button backButton = createStyledButton("← Главное меню", "#E74C3C", "#EC7063");
         backButton.setOnAction(e -> goBack());
 
-        Button restartButton = new Button("Новая игра");
+        Button restartButton = createStyledButton("Новая игра", "#3498DB", "#2980B9");
         restartButton.setOnAction(e -> restartGame());
 
-        Button autoPlaceButton = new Button("Авторасстановка");
+        Button autoPlaceButton = createStyledButton("Авторасстановка", "#9B59B6", "#8E44AD");
         autoPlaceButton.setOnAction(e -> {
             placeAllShipsAutomatically();
             updatePlayerGrid();
@@ -436,8 +474,7 @@ public class GameController extends BorderPane {
             updateReadyButtonState();
         });
 
-        // Кнопка "Готов"
-        Button readyButton = new Button("Готов к игре");
+        Button readyButton = createStyledButton("✓ Готов к игре", "#27AE60", "#2ECC71");
         readyButton.setId("readyButton");
         readyButton.setOnAction(e -> {
             if (player.allShipsPlaced()) {
@@ -453,12 +490,10 @@ public class GameController extends BorderPane {
 
         bottomPanel.getChildren().addAll(leftBox, centerBox);
 
-        // Кнопка чата (только для сетевой игры)
         if (gameMode.equals("host") || gameMode.equals("client")) {
-            Button chatButton = new Button("💬 Чат");
+            Button chatButton = createStyledButton("Чат", "#2ECC71", "#27AE60");
             chatButton.setId("chatButton");
             chatButton.setOnAction(e -> openGameChat());
-            chatButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
 
             VBox rightBox = new VBox(5, chatButton);
             bottomPanel.getChildren().add(rightBox);
@@ -468,6 +503,28 @@ public class GameController extends BorderPane {
         return bottomPanel;
     }
 
+    private Button createStyledButton(String text, String color1, String color2) {
+        Button button = new Button(text);
+        button.setStyle(getButtonStyle(color1, color2));
+        button.setFont(Font.font("Arial", 14));
+        return button;
+    }
+
+    private String getButtonStyle(String color1, String color2) {
+        return "-fx-background-color: linear-gradient(to bottom, " + color1 + ", " + color2 + "); " +
+                "-fx-background-radius: 10; " +
+                "-fx-text-fill: white; " +
+                "-fx-font-weight: bold; " +
+                "-fx-padding: 8 15; " +
+                "-fx-cursor: hand; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 8, 0.5, 0, 2); " +
+                "-fx-border-color: rgba(255,255,255,0.2); " +
+                "-fx-border-width: 1; " +
+                "-fx-border-radius: 10;" +
+                "-fx-min-width: 120;" +
+                "-fx-min-height: 40;";
+    }
+
     private void updateReadyButtonState() {
         Platform.runLater(() -> {
             // Находим кнопку "Готов" в интерфейсе
@@ -475,15 +532,16 @@ public class GameController extends BorderPane {
             if (readyButton != null) {
                 if (iAmReady) {
                     readyButton.setText("✓ Готов");
-                    readyButton.setStyle("-fx-background-color: #27AE60; -fx-text-fill: white;");
+                    readyButton.setStyle(getButtonStyle("#27AE60", "#2ECC71") +
+                            "-fx-effect: innershadow(gaussian, rgba(0,0,0,0.3), 5, 0.5, 0, 1);");
                     readyButton.setDisable(true);
                 } else if (player.allShipsPlaced()) {
                     readyButton.setText("Готов к игре");
-                    readyButton.setStyle("-fx-background-color: #2E8B57; -fx-text-fill: white;");
+                    readyButton.setStyle(getButtonStyle("#2ECC71", "#27AE60"));
                     readyButton.setDisable(false);
                 } else {
                     readyButton.setText("Расставьте корабли");
-                    readyButton.setStyle("-fx-background-color: #7F8C8D; -fx-text-fill: white;");
+                    readyButton.setStyle(getButtonStyle("#7F8C8D", "#95A5A6"));
                     readyButton.setDisable(true);
                 }
             }
@@ -500,19 +558,24 @@ public class GameController extends BorderPane {
                     GameBoard.CellState state = player.getBoard().getCell(x, y);
                     switch (state) {
                         case EMPTY:
-                            cell.setFill(Color.LIGHTBLUE);
+                            cell.setFill(Color.web("#3498DB", 0.7));
                             break;
                         case SHIP:
-                            cell.setFill(Color.DARKGRAY);
+                            cell.setFill(Color.web("#34495E"));
                             break;
                         case HIT:
-                            cell.setFill(Color.RED);
+                            cell.setFill(Color.web("#E74C3C"));
                             break;
                         case MISS:
-                            cell.setFill(Color.WHITE);
+                            cell.setFill(Color.web("#ECF0F1"));
                             break;
                         case SUNK:
-                            cell.setFill(Color.DARKRED);
+                            LinearGradient sunkGradient = new LinearGradient(
+                                    0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                                    new Stop(0, Color.web("#C0392B")),
+                                    new Stop(1, Color.web("#E74C3C"))
+                            );
+                            cell.setFill(sunkGradient);
                             break;
                     }
                 }
@@ -525,9 +588,7 @@ public class GameController extends BorderPane {
             for (int x = 0; x < 10; x++) {
                 Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
                 if (cell != null) {
-                    // Показываем только результаты выстрелов
-                    // Не показываем расположение кораблей противника
-                    cell.setFill(Color.LIGHTBLUE);
+                    cell.setFill(Color.web("#E74C3C", 0.7));
                 }
             }
         }
@@ -543,7 +604,7 @@ public class GameController extends BorderPane {
         Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
         if (cell != null) {
             Color fill = (Color) cell.getFill();
-            if (fill.equals(Color.RED) || fill.equals(Color.WHITE)) {
+            if (fill.equals(Color.web("#E74C3C")) || fill.equals(Color.web("#ECF0F1"))) {
                 showInfo("Вы уже стреляли в эту клетку!");
                 return;
             }
@@ -564,12 +625,12 @@ public class GameController extends BorderPane {
         if (sent) {
             // Временно помечаем клетку
             if (cell != null) {
-                cell.setFill(Color.ORANGE);
+                cell.setFill(Color.web("#F1C40F"));
             }
 
             isMyTurn = false;
             statusLabel.setText("Ожидаем результат выстрела...");
-            statusLabel.setTextFill(Color.YELLOW);
+            statusLabel.setTextFill(Color.web("#F1C40F"));
             setEnemyFieldEnabled(false);
         } else {
             showError("Не удалось отправить ход. Проверьте соединение.");
@@ -674,13 +735,14 @@ public class GameController extends BorderPane {
 
             Platform.runLater(() -> {
                 statusLabel.setText("✓ Вы готовы. Ожидаем противника...");
-                statusLabel.setTextFill(Color.GREEN);
+                statusLabel.setTextFill(Color.web("#2ECC71"));
 
                 // Обновляем кнопку
                 Button readyButton = (Button) lookup("#readyButton");
                 if (readyButton != null) {
                     readyButton.setText("✓ Готов");
-                    readyButton.setStyle("-fx-background-color: #27AE60; -fx-text-fill: white;");
+                    readyButton.setStyle(getButtonStyle("#27AE60", "#2ECC71") +
+                            "-fx-effect: innershadow(gaussian, rgba(0,0,0,0.3), 5, 0.5, 0, 1);");
                     readyButton.setDisable(true);
                 }
             });
@@ -823,6 +885,11 @@ public class GameController extends BorderPane {
                 retryAlert.setTitle("Ошибка подключения");
                 retryAlert.setHeaderText("Не удалось подключиться к серверу");
                 retryAlert.setContentText("Хотите попробовать другой адрес?");
+
+                // Стилизация алерта
+                retryAlert.getDialogPane().setStyle("-fx-background-color: linear-gradient(to bottom, #2C3E50, #4CA1AF);");
+                retryAlert.getDialogPane().lookupButton(ButtonType.OK).setStyle(getButtonStyle("#27AE60", "#2ECC71"));
+                retryAlert.getDialogPane().lookupButton(ButtonType.CANCEL).setStyle(getButtonStyle("#E74C3C", "#EC7063"));
 
                 Optional<ButtonType> retryResult = retryAlert.showAndWait();
                 if (retryResult.isPresent() && retryResult.get() == ButtonType.OK) {
@@ -1090,7 +1157,7 @@ public class GameController extends BorderPane {
 
                 if (iAmReady) {
                     statusLabel.setText("Оба игрока готовы! Начинаем игру...");
-                    statusLabel.setTextFill(Color.GREEN);
+                    statusLabel.setTextFill(Color.web("#2ECC71"));
 
                     // Отправляем приветственное сообщение в чат
                     sendWelcomeChatMessage();
@@ -1106,7 +1173,7 @@ public class GameController extends BorderPane {
                     }).start();
                 } else {
                     statusLabel.setText("Противник готов. Вы еще не готовы.");
-                    statusLabel.setTextFill(Color.ORANGE);
+                    statusLabel.setTextFill(Color.web("#F1C40F"));
                 }
 
             } catch (Exception e) {
@@ -1120,14 +1187,12 @@ public class GameController extends BorderPane {
             gameStarted = true;
             System.out.println("Игра началась! Противник: " + opponentType);
 
-            // Определяем, кто ходит первым
             if (connectionType != null && opponentType != null) {
                 if (connectionType.equals("host") && opponentType.equals("client")) {
-                    isMyTurn = true; // Хост ходит первым
+                    isMyTurn = true;
                 } else if (connectionType.equals("client") && opponentType.equals("host")) {
-                    isMyTurn = false; // Клиент ходит вторым
+                    isMyTurn = false;
                 } else {
-                    // Случайный выбор
                     isMyTurn = Math.random() > 0.5;
                 }
             } else {
@@ -1136,12 +1201,12 @@ public class GameController extends BorderPane {
 
             if (isMyTurn) {
                 statusLabel.setText("Игра началась! Ваш ход.");
-                statusLabel.setTextFill(Color.LIGHTGREEN);
+                statusLabel.setTextFill(Color.web("#2ECC71"));
                 setEnemyFieldEnabled(true);
                 showAlert("Игра началась!", "Ваш ход! Атакуйте поле противника.");
             } else {
                 statusLabel.setText("Игра началась! Ход противника.");
-                statusLabel.setTextFill(Color.ORANGE);
+                statusLabel.setTextFill(Color.web("#F1C40F"));
                 setEnemyFieldEnabled(false);
                 showAlert("Игра началась!", "Ход противника. Ожидайте своей очереди.");
             }
@@ -1182,7 +1247,6 @@ public class GameController extends BorderPane {
 
             GameBoard.CellState result = player.attack(x, y);
 
-            // Отправляем результат
             String response = "RESULT:" + x + "," + y + "," + result;
             if (gameClient != null && gameClient.isConnected()) {
                 gameClient.sendMessage(response);
@@ -1192,18 +1256,15 @@ public class GameController extends BorderPane {
 
             updatePlayerGrid();
 
-            // Проверяем, не потопил ли противник все наши корабли
             if (player.allShipsSunk()) {
-                // Мы проиграли
                 System.out.println("[GameController] ПОРАЖЕНИЕ! Все наши корабли потоплены");
 
                 Platform.runLater(() -> {
                     statusLabel.setText("ВЫ ПРОИГРАЛИ!");
-                    statusLabel.setTextFill(Color.RED);
+                    statusLabel.setTextFill(Color.web("#E74C3C"));
                     gameStarted = false;
                     setEnemyFieldEnabled(false);
 
-                    // Отправляем сообщение о победе противнику
                     String winMessage = "WIN:you";
                     if (gameClient != null) gameClient.sendMessage(winMessage);
                     if (gameServer != null) gameServer.sendMessage(winMessage);
@@ -1211,10 +1272,9 @@ public class GameController extends BorderPane {
                     showAlert("Игра окончена", "Вы проиграли! Все ваши корабли потоплены.");
                 });
             } else {
-                // Теперь наш ход
                 isMyTurn = true;
                 statusLabel.setText("Ваш ход");
-                statusLabel.setTextFill(Color.LIGHTGREEN);
+                statusLabel.setTextFill(Color.web("#2ECC71"));
                 setEnemyFieldEnabled(true);
             }
 
@@ -1233,30 +1293,27 @@ public class GameController extends BorderPane {
             Rectangle cell = (Rectangle) getNodeFromGridPane(enemyGrid, x, y);
             if (cell != null) {
                 if (result.equals("HIT") || result.equals("SUNK")) {
-                    cell.setFill(Color.RED);
+                    cell.setFill(Color.web("#E74C3C"));
                     enemyHits++;
 
                     System.out.println("[GameController] Попадание! Всего попаданий: " + enemyHits + "/" + totalEnemyCells);
 
-                    // Проверяем победу
                     if (enemyHits >= totalEnemyCells) {
                         handleVictory();
                         return;
                     }
 
-                    // Дополнительный ход при попадании
                     isMyTurn = true;
                     statusLabel.setText("Вы попали! Стреляйте снова");
-                    statusLabel.setTextFill(Color.LIGHTGREEN);
+                    statusLabel.setTextFill(Color.web("#2ECC71"));
                     setEnemyFieldEnabled(true);
 
                 } else if (result.equals("MISS")) {
-                    cell.setFill(Color.WHITE);
+                    cell.setFill(Color.web("#ECF0F1"));
 
-                    // Промах - ход противника
                     isMyTurn = false;
                     statusLabel.setText("Ход противника");
-                    statusLabel.setTextFill(Color.ORANGE);
+                    statusLabel.setTextFill(Color.web("#F1C40F"));
                     setEnemyFieldEnabled(false);
                 }
             }
@@ -1271,11 +1328,10 @@ public class GameController extends BorderPane {
 
         Platform.runLater(() -> {
             statusLabel.setText("ВЫ ВЫИГРАЛИ!");
-            statusLabel.setTextFill(Color.GREEN);
+            statusLabel.setTextFill(Color.web("#2ECC71"));
             gameStarted = false;
             setEnemyFieldEnabled(false);
 
-            // Отправляем сообщение о победе
             String winMessage = "WIN:you";
             if (gameClient != null && gameClient.isConnected()) {
                 gameClient.sendMessage(winMessage);
@@ -1293,7 +1349,7 @@ public class GameController extends BorderPane {
         Platform.runLater(() -> {
             if (message.equals("WIN:you")) {
                 statusLabel.setText("ВЫ ПРОИГРАЛИ!");
-                statusLabel.setTextFill(Color.RED);
+                statusLabel.setTextFill(Color.web("#E74C3C"));
                 gameStarted = false;
                 setEnemyFieldEnabled(false);
                 showAlert("Игра окончена", "Вы проиграли! Все ваши корабли потоплены.");
@@ -1303,7 +1359,6 @@ public class GameController extends BorderPane {
 
     private void showInfo(String message) {
         System.out.println("INFO: " + message);
-        // Можно добавить отображение в чат или статус-бар
     }
 
     private void showAlert(String title, String message) {
@@ -1312,6 +1367,9 @@ public class GameController extends BorderPane {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
+
+            alert.getDialogPane().setStyle("-fx-background-color: linear-gradient(to bottom, #2C3E50, #4CA1AF);");
+            alert.getDialogPane().lookupButton(ButtonType.OK).setStyle(getButtonStyle("#27AE60", "#2ECC71"));
             alert.showAndWait();
         });
     }
@@ -1321,6 +1379,10 @@ public class GameController extends BorderPane {
         alert.setTitle("Ошибка");
         alert.setHeaderText(null);
         alert.setContentText(message);
+
+        // Стилизация алерта
+        alert.getDialogPane().setStyle("-fx-background-color: linear-gradient(to bottom, #2C3E50, #4CA1AF);");
+        alert.getDialogPane().lookupButton(ButtonType.OK).setStyle(getButtonStyle("#E74C3C", "#EC7063"));
         alert.showAndWait();
     }
 
@@ -1345,10 +1407,8 @@ public class GameController extends BorderPane {
             }
         } catch (Exception e) {
             System.err.println("Ошибка при закрытии соединений: " + e.getMessage());
-            // Не прерываем выход из-за ошибки закрытия
         }
 
-        // Делаем небольшую паузу для завершения операций закрытия
         new Thread(() -> {
             try {
                 Thread.sleep(100); // 100ms пауза
@@ -1374,21 +1434,17 @@ public class GameController extends BorderPane {
         }
         chatLaunched = false;
 
-        // Сбрасываем игроков
         player = new Player("Игрок");
         enemy = new Player("Противник");
 
-        // Сбрасываем состояние игры
         isMyTurn = false;
         gameStarted = false;
         iAmReady = false;
         opponentReady = false;
         enemyHits = 0;
 
-        // Перерасставляем корабли
         placeAllShipsAutomatically();
 
-        // Обновляем UI
         updatePlayerGrid();
         updateEnemyGrid();
 
@@ -1396,7 +1452,6 @@ public class GameController extends BorderPane {
         statusLabel.setTextFill(Color.WHITE);
         setEnemyFieldEnabled(false);
 
-        // Обновляем кнопку "Готов"
         updateReadyButtonState();
 
         System.out.println("[GameController] Игра перезапущена");

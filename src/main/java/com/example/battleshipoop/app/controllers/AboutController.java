@@ -75,7 +75,7 @@ public class AboutController extends BorderPane {
         devTitle.setFont(javafx.scene.text.Font.font("Segoe UI", javafx.scene.text.FontWeight.BOLD, 16));
         devTitle.setTextFill(FXDesignHelper.LIGHT_BLUE);
 
-        Label devInfo = new Label("BattleShip Development Team\nJavaFX проект 2024");
+        Label devInfo = new Label("BattleShip\nJavaFX проект 2026");
         devInfo.setFont(javafx.scene.text.Font.font("Segoe UI", 12));
         devInfo.setTextFill(Color.LIGHTGRAY);
         devInfo.setTextAlignment(TextAlignment.CENTER);
